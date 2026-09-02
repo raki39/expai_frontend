@@ -4,206 +4,352 @@
  * Isso justifica ser simples, nao justifica ser confuso - o painel e como o
  * experimento e observado, e observacao ruim leva a conclusao ruim.
  *
- * Monoespacada de proposito: quase todo dado desta tela e numero, hash ou
- * timestamp, e alinhamento de coluna importa mais que elegancia.
+ * DUAS FAMILIAS, de proposito. Prosa em sans: explicacao lida em bloco cansa
+ * em monoespacada. Dado em mono, sempre: numero, hash e timestamp so sao
+ * comparaveis empilhados se as colunas alinharem. Misturar sem criterio e o
+ * que deixava a tela dificil de varrer.
+ *
+ * A ordem das secoes e a do `05-painel.md` secao 6, numerada igual. Nao e
+ * gosto: com a mesma numeracao, o painel e o documento sao legiveis um contra
+ * o outro, e some a duvida de qual bloco ficou faltando.
  */
 
 :root {
   color-scheme: dark;
 
-  --fundo: #0f1115;
-  --fundo-2: #161a21;
-  --fundo-3: #1d2532;
-  --borda: #232833;
-  --borda-forte: #2c3340;
+  --fundo: #0d0f14;
+  --fundo-2: #14171e;
+  --fundo-3: #1b202a;
+  --fundo-4: #232936;
+  --borda: #222835;
+  --borda-forte: #2f3746;
 
-  --texto: #d7dbe0;
-  --fraco: #8b93a1;
-  --tenue: #6f7888;
+  --texto: #dde1e8;
+  --fraco: #8e97a6;
+  --tenue: #69738a;
 
   --ok: #4ade80;
   --ruim: #f87171;
   --alerta: #fbbf24;
   --destaque: #a5b4fc;
+  --acento: #6b8cff;
 
-  --raio: 8px;
+  --raio: 10px;
+  --raio-s: 6px;
+
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
 
+html { scroll-behavior: smooth; scroll-padding-top: 96px; }
+
 body {
   margin: 0;
-  font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  background: var(--fundo);
+  font: 14px/1.6 var(--sans);
+  background:
+    radial-gradient(1100px 460px at 50% -160px, #171c27 0%, transparent 70%),
+    var(--fundo);
   color: var(--texto);
+  -webkit-font-smoothing: antialiased;
 }
 
-main { max-width: 1100px; margin: 0 auto; padding: 0 20px 96px; }
+main { max-width: 1160px; margin: 0 auto; padding: 0 20px 110px; }
 
-/* ------------------------------------------------------------- cabecalho */
+/* =========================================================== cabecalho */
 
 .topo {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 26px 0 18px;
-  border-bottom: 1px solid var(--borda);
-  margin-bottom: 4px;
+  padding: 26px 0 16px;
 }
 
-.topo h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
-.topo .contexto { color: var(--tenue); font-size: 12px; display: flex; gap: 14px; }
+.topo h1 {
+  font-size: 16px;
+  margin: 0;
+  letter-spacing: .01em;
+  font-weight: 650;
+}
+
+.topo .contexto {
+  color: var(--tenue);
+  font-size: 12px;
+  font-family: var(--mono);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* Barra de estado: a resposta a "onde estamos" sem rolar a pagina. */
+.resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--borda);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.resumo > div { background: var(--fundo-2); padding: 11px 14px; }
+.resumo dt {
+  margin: 0;
+  color: var(--tenue);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+.resumo dd {
+  margin: 3px 0 0;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Navegacao por ancora. Sem JavaScript: sao links, e `scroll-behavior`
+ * suaviza. Interatividade que nao precisa de runtime nao deve ter runtime. */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  background: linear-gradient(var(--fundo) 72%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.nav a {
+  color: var(--fraco);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.nav a:hover { color: var(--texto); background: var(--fundo-3); border-color: var(--borda); }
+.nav a b { color: var(--tenue); font-weight: 600; margin-right: 5px; }
+
+/* ============================================================= secoes */
+
+section { scroll-margin-top: 84px; }
 
 h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   font-size: 12px;
-  margin: 30px 0 10px;
+  margin: 34px 0 12px;
   color: var(--fraco);
   text-transform: uppercase;
   letter-spacing: .09em;
-  font-weight: 600;
+  font-weight: 650;
+}
+h2::before {
+  content: attr(data-n);
+  font-family: var(--mono);
+  color: var(--acento);
+  font-size: 11px;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-s);
+  padding: 1px 6px;
+  letter-spacing: 0;
+}
+h2 .nota {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: var(--tenue);
+  font-size: 11px;
 }
 
 .sub { color: var(--fraco); margin: 0; }
+.mono { font-family: var(--mono); }
 
-/* ----------------------------------------------------------------- cards */
+/* ============================================================== cards */
 
 .card {
   background: var(--fundo-2);
   border: 1px solid var(--borda);
   border-radius: var(--raio);
-  padding: 14px 16px;
+  padding: 15px 17px;
 }
 
-/* Duas colunas quando cabe. A pagina ficou longa demais com dataset,
- * configuracao, ledger e sentinela empilhados. */
-.duas {
+.card + .card { margin-top: 14px; }
+
+.card h3 {
+  font-size: 11px;
+  margin: 0 0 11px;
+  color: var(--fraco);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 650;
+}
+
+.duas, .tres {
   display: grid;
   gap: 14px;
   grid-template-columns: 1fr;
 }
-@media (min-width: 860px) {
-  .duas { grid-template-columns: 1fr 1fr; }
-}
+@media (min-width: 860px) { .duas { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1000px) { .tres { grid-template-columns: repeat(3, 1fr); } }
 
-.card h3 {
-  font-size: 12px;
-  margin: 0 0 10px;
-  color: var(--fraco);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  font-weight: 600;
-}
+/* Numero grande, para o valor que a secao existe para mostrar. */
+.metrica { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+.metrica small { font-size: 12px; color: var(--tenue); margin-left: 6px; font-family: var(--sans); }
 
-/* --------------------------------------------------------------- tabelas */
+/* ============================================================ tabelas */
 
-table { width: 100%; border-collapse: collapse; }
-td { padding: 5px 0; vertical-align: top; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { padding: 6px 0; vertical-align: top; text-align: left; font-weight: inherit; }
 td:first-child { color: var(--fraco); width: 42%; padding-right: 12px; }
 
-/* Numero alinha a direita e usa digitos de largura fixa: comparar valores
- * empilhados e a razao de existir desta tabela. */
-td.num, .num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+/* Dado tabular sempre em mono: comparar valores empilhados e a razao de a
+ * tabela existir, e alinhamento de coluna e o que torna isso possivel. */
+td.num, .num, td.mono, .hash, code { font-family: var(--mono); }
+td.num, .num { text-align: right; font-variant-numeric: tabular-nums; }
 
-tr.total td { border-top: 1px solid var(--borda); padding-top: 8px; }
+tr.total td { border-top: 1px solid var(--borda); padding-top: 9px; }
+tr.cabeca td { color: var(--tenue); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+tbody tr:hover td { background: rgba(255, 255, 255, .018); }
 
-/* --------------------------------------------------------------- estados */
+.rolavel { overflow-x: auto; }
+.rolavel table { min-width: 520px; }
+
+/* ============================================================ estados */
 
 .ok { color: var(--ok); }
 .bad { color: var(--ruim); }
 .warn { color: var(--alerta); }
 
-/* Marcador de estado. Le-se muito mais rapido que "sim"/"nao" em texto. */
 .pill {
   display: inline-block;
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11.5px;
+  font-family: var(--mono);
   border: 1px solid currentColor;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .pill.ok   { background: rgba(74, 222, 128, .10); }
 .pill.bad  { background: rgba(248, 113, 113, .10); }
 .pill.warn { background: rgba(251, 191, 36, .10); }
 .pill.neutro { color: var(--tenue); background: transparent; }
 
-/* --------------------------------------------------------------- avisos */
-
 .aviso {
-  border-radius: 6px;
-  padding: 10px 12px;
+  border-radius: var(--raio-s);
+  padding: 11px 13px;
   margin-top: 12px;
   border: 1px solid;
+  border-left-width: 3px;
   font-size: 13px;
 }
-.aviso.ok   { border-color: rgba(74, 222, 128, .35); background: rgba(74, 222, 128, .07); }
-.aviso.bad  { border-color: rgba(248, 113, 113, .35); background: rgba(248, 113, 113, .07); }
-.aviso.warn { border-color: rgba(251, 191, 36, .35); background: rgba(251, 191, 36, .07); }
+.aviso.ok   { border-color: rgba(74, 222, 128, .35); background: rgba(74, 222, 128, .06); }
+.aviso.bad  { border-color: rgba(248, 113, 113, .38); background: rgba(248, 113, 113, .06); }
+.aviso.warn { border-color: rgba(251, 191, 36, .35); background: rgba(251, 191, 36, .06); }
 .aviso p { margin: 0 0 4px; }
+.aviso p:last-child { margin-bottom: 0; }
 
-/* O JSON cru continua acessivel, mas parou de dominar a tela. */
+/* O JSON cru continua acessivel e parou de dominar a tela. */
 details { margin-top: 8px; }
-summary { cursor: pointer; color: var(--fraco); font-size: 12px; }
+summary {
+  cursor: pointer;
+  color: var(--fraco);
+  font-size: 12px;
+  list-style: none;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+summary::before { content: "▸"; color: var(--tenue); font-size: 10px; }
+details[open] > summary::before { content: "▾"; }
 summary:hover { color: var(--texto); }
 details pre {
   white-space: pre-wrap;
   word-break: break-all;
   overflow-x: auto;
   font-size: 12px;
+  font-family: var(--mono);
   margin: 8px 0 0;
   color: var(--fraco);
-  max-height: 260px;
+  max-height: 300px;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-s);
+  padding: 10px;
 }
 
-/* ------------------------------------------------------------ formularios */
+/* ========================================================= formularios */
 
 input, button, textarea, select {
   font: inherit;
-  padding: 7px 10px;
-  border-radius: 6px;
+  font-size: 13px;
+  padding: 7px 11px;
+  border-radius: var(--raio-s);
   border: 1px solid var(--borda-forte);
   background: var(--fundo);
   color: var(--texto);
 }
-input:focus, textarea:focus { outline: 1px solid var(--destaque); border-color: var(--destaque); }
+input, textarea { font-family: var(--mono); }
+input:focus, textarea:focus { outline: 2px solid rgba(107, 140, 255, .4); border-color: var(--acento); }
 
 button {
   cursor: pointer;
-  border-color: #3a4252;
-  background: var(--fundo-3);
+  border-color: #39415280;
+  background: var(--fundo-4);
   white-space: nowrap;
+  font-weight: 550;
+  transition: background .12s ease;
 }
-button:hover:not(:disabled) { background: #253044; }
+button:hover:not(:disabled) { background: #2b3346; }
 button:disabled { opacity: .55; cursor: progress; }
+
+/* A acao que gasta dinheiro de verdade nao pode parecer com as outras. */
+button.gasta { border-color: rgba(251, 191, 36, .5); background: rgba(251, 191, 36, .1); }
+button.gasta:hover:not(:disabled) { background: rgba(251, 191, 36, .18); }
 
 .forma { display: grid; gap: 8px; margin-top: 12px; }
 .linha { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
+/* Faixa de acao no rodape de um card: separa "o que aconteceu" de "o que
+ * voce pode fazer", que estavam misturados. */
+.acoes {
+  margin: 14px -17px -15px;
+  padding: 12px 17px;
+  border-top: 1px solid var(--borda);
+  background: rgba(255, 255, 255, .015);
+  border-radius: 0 0 var(--raio) var(--raio);
+}
+.acoes .sub { font-size: 12px; }
+
 label.caixa {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  color: var(--fraco);
-  font-size: 13px;
-  cursor: pointer;
+  display: flex; gap: 6px; align-items: center;
+  color: var(--fraco); font-size: 13px; cursor: pointer;
 }
 
-/* ---------------------------------------------------------------- rodape */
+/* ============================================================== rodape */
 
 footer {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  background: #0b0d11;
+  background: #090b0f;
   border-top: 1px solid var(--borda);
   color: var(--tenue);
-  font-size: 12px;
+  font-size: 11.5px;
   padding: 9px 20px;
   text-align: center;
+  z-index: 10;
 }
 
-code { color: var(--destaque); }
+code { color: var(--destaque); font-size: 12.5px; }
 .hash { color: var(--destaque); font-size: 12px; }

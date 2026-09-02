@@ -10,18 +10,24 @@ import { useFormStatus } from "react-dom";
  * um botao que nao responde ao clique durante meio minuto e indistinguivel de
  * um botao quebrado. Quem clica de novo dispara a operacao duas vezes.
  *
+ * `classe` existe para um caso so: a acao que gasta dinheiro de verdade nao
+ * pode parecer com as outras. Um botao que custa R$0,00 e um que custa R$0,34
+ * com a mesma aparencia sao um convite a clicar sem ler.
+ *
  * E o unico componente de cliente do painel. Todo o resto e servidor.
  */
 export function Botao({
   children,
-  pendente = "aguarde…",
+  pendente = "aguarde...",
+  classe = "",
 }: {
   children: ReactNode;
   pendente?: string;
+  classe?: string;
 }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}>
+    <button type="submit" className={classe} disabled={pending}>
       {pending ? pendente : children}
     </button>
   );
