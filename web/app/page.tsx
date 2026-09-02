@@ -44,6 +44,53 @@ type Dataset = {
   end_ms?: number;
 };
 
+type Agente = {
+  run_id: number | null;
+  caminho: {
+    id: number;
+    parent_event_id: number | null;
+    node: string;
+    kind: string;
+    tier: string | null;
+    provider: string | null;
+    model: string | null;
+    tokens_in: number | null;
+    tokens_out: number | null;
+    tokens_cache_read: number | null;
+    tokens_cache_write: number | null;
+    cost_usd_minor: number | null;
+    cost_usd_micro: number | null;
+    price_table_version: string | null;
+    expectation: string | null;
+    confidence_ppm: number | null;
+  }[];
+  propostas: {
+    id: number;
+    status: string;
+    rejection_reason: string | null;
+    expectation: string | null;
+    confidence_ppm: number | null;
+  }[];
+  regra_ativa: {
+    rule_id: number;
+    regra_hash: string;
+    family: string;
+    params_json: string;
+    expectation: string | null;
+    confidence_ppm: number | null;
+  } | null;
+  gasto: {
+    chamadas_com_custo: number;
+    gasto_cents: number;
+    gasto_micro: number;
+    gasto_real_brl_cents: number;
+  } | null;
+  sobreposicao_amostral?: { sobreposicao_bps: number | null };
+  condicoes_validade?: string;
+  cache_de_respostas?: number;
+  arredondamento_do_custo_ok?: boolean;
+};
+
 type ConfigResposta = {
   version_id: number;
   config_hash: string;
@@ -262,6 +309,17 @@ async function rodarComparacao() {
   paraPainel(status, corpo, "comparacao");
 }
 
+async function rodarAgente() {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/agente", {
+    method: "POST",
+    body: JSON.stringify({ author: "painel" }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "agente");
+}
+
 async function gravarSentinela(formData: FormData) {
   "use server";
   if (!(await temSessao())) redirect("/login");
@@ -285,13 +343,14 @@ export default async function Painel({
     config?: string;
     run?: string;
     comparacao?: string;
+    agente?: string;
     detalhe?: string;
   }>;
 }) {
   if (!(await temSessao())) redirect("/login");
 
   const p = await searchParams;
-  const [health, dataset, config, ledger, transacoes, sentinelas, simulador, execucoes, comparacao] =
+  const [health, dataset, config, ledger, transacoes, sentinelas, simulador, execucoes, comparacao, agente] =
     await Promise.all([
       chamarApi("/api/health"),
       chamarApi("/api/dataset"),
@@ -302,6 +361,7 @@ export default async function Painel({
       chamarApi("/api/simulador"),
       chamarApi("/api/execucoes?limite=10"),
       chamarApi("/api/comparacao"),
+      chamarApi("/api/agente"),
     ]);
 
   if (health.status !== 200) {
@@ -337,6 +397,7 @@ export default async function Painel({
   const sim = simulador.corpo as Simulador;
   const exec = (execucoes.corpo as Execucoes)?.items ?? [];
   const cmp = comparacao.corpo as Comparacao;
+  const ag = agente.corpo as Agente;
   const cfg = c?.config ?? null;
 
   const tudoConfere =
@@ -477,6 +538,144 @@ export default async function Painel({
           </Botao>
         </form>
         <Resultado status={p.comparacao} detalhe={p.detalhe} />
+      </div>
+
+      {/* ======================================================== agente */}
+      <h2>Cerebro lento</h2>
+      <div className="card">
+        {ag.run_id ? (
+          <>
+            <table>
+              <tbody>
+                <tr>
+                  <td className="sub">no</td>
+                  <td className="sub">tier</td>
+                  <td className="sub">entrada / saida</td>
+                  <td className="sub">cache le / grava</td>
+                  <td className="sub">custo</td>
+                </tr>
+                {ag.caminho.map((e) => (
+                  <tr key={e.id}>
+                    <td style={{ width: "auto" }}>
+                      <code>{e.node}</code>{" "}
+                      <span className="sub">{e.kind}</span>
+                    </td>
+                    <td className="sub">{e.tier ?? "—"}</td>
+                    {/* Nulo e "o provedor nao informou", e por isso aparece
+                        como travessao e nunca como zero: as duas coisas sao
+                        afirmacoes diferentes (secao 5.2). */}
+                    <td className="num sub">
+                      {e.tokens_in ?? "—"} / {e.tokens_out ?? "—"}
+                    </td>
+                    <td className="num sub">
+                      {e.tokens_cache_read ?? "—"} / {e.tokens_cache_write ?? "—"}
+                    </td>
+                    <td className="num">
+                      {e.cost_usd_micro
+                        ? `US$ ${(e.cost_usd_micro / 1_000_000).toFixed(6)}`
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="total">
+                  <td>gasto do run</td>
+                  <td className="sub">
+                    {ag.gasto?.chamadas_com_custo ?? 0} chamada(s) com custo
+                  </td>
+                  <td colSpan={2} className="sub">
+                    saiu da conta:{" "}
+                    <Dinheiro minor={ag.gasto?.gasto_real_brl_cents} moeda="BRL" />
+                  </td>
+                  <td className="num">
+                    {ag.gasto
+                      ? `US$ ${(ag.gasto.gasto_micro / 1_000_000).toFixed(6)}`
+                      : "—"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {ag.regra_ativa ? (
+              <div className="aviso ok" style={{ marginTop: 12 }}>
+                <p style={{ marginBottom: 6 }}>
+                  Regra proposta: <code>{ag.regra_ativa.family}</code>{" "}
+                  <code>{ag.regra_ativa.params_json}</code>{" "}
+                  <Hash valor={ag.regra_ativa.regra_hash} />
+                </p>
+                <p className="sub" style={{ marginBottom: 0 }}>
+                  Expectativa declarada <strong>antes</strong> da execucao,
+                  confianca{" "}
+                  {ag.regra_ativa.confidence_ppm != null
+                    ? `${(ag.regra_ativa.confidence_ppm / 10_000).toFixed(1)}%`
+                    : "—"}
+                  : {ag.regra_ativa.expectation}
+                </p>
+              </div>
+            ) : (
+              <div className="aviso warn" style={{ marginTop: 12 }}>
+                <p style={{ marginBottom: 0 }}>
+                  Nenhuma regra veio do cerebro neste run — as maos rapidas
+                  rodaram a <strong>regra padrao</strong>, que e o mesmo
+                  cruzamento do B3. Um resultado assim nao esta medindo cerebro
+                  nenhum.
+                </p>
+              </div>
+            )}
+
+            {ag.propostas.some((x) => x.status === "rejeitada") ? (
+              <div className="aviso bad" style={{ marginTop: 10 }}>
+                <p style={{ marginBottom: 0 }}>
+                  {ag.propostas.filter((x) => x.status === "rejeitada").length}{" "}
+                  proposta(s) rejeitada(s):{" "}
+                  {ag.propostas
+                    .filter((x) => x.status === "rejeitada")
+                    .map((x) => x.rejection_reason)
+                    .join(" · ")}
+                </p>
+              </div>
+            ) : null}
+
+            <p className="sub" style={{ margin: "12px 0 0", fontSize: 12 }}>
+              {/* A sobreposicao e CALCULADA do que ficou gravado, e nao uma
+                  frase que envelhece quando o desenho muda. */}
+              Sobreposicao entre a janela observada e a executada:{" "}
+              <strong>
+                {ag.sobreposicao_amostral?.sobreposicao_bps != null
+                  ? `${(ag.sobreposicao_amostral.sobreposicao_bps / 100).toFixed(0)}%`
+                  : "—"}
+              </strong>
+              . Na Fase 0A o cerebro observa a mesma janela em que a regra roda,
+              entao o resultado do agente e <strong>em amostra</strong>:
+              suficiente para responder "o ciclo fecha?", insuficiente para
+              qualquer afirmacao de desempenho. Cache de respostas:{" "}
+              {ag.cache_de_respostas ?? 0} entrada(s).
+            </p>
+            <details style={{ marginTop: 8 }}>
+              <summary className="sub">condicoes de validade do run</summary>
+              <p className="sub" style={{ fontSize: 12 }}>
+                {ag.condicoes_validade}
+              </p>
+            </details>
+          </>
+        ) : (
+          <p className="sub" style={{ marginTop: 0 }}>
+            O agente ainda nao rodou.
+          </p>
+        )}
+
+        <p className="sub" style={{ margin: "14px 0 0", fontSize: 12 }}>
+          <strong>Esta e a unica acao do painel que gasta dinheiro de
+          verdade.</strong> Observa o periodo em Python, pede uma reflexao, pede
+          uma regra do catalogo fechado, registra a intencao e so entao executa.
+          Teto de chamadas e de gasto conferidos antes de cada chamada, lidos do
+          ledger. Exige dataset ingerido e nenhum run ativo.
+        </p>
+        <form action={rodarAgente} className="linha" style={{ marginTop: 10 }}>
+          <Botao pendente="refletindo e executando…">
+            {ag.run_id ? "Rodar o agente de novo" : "Rodar o agente"}
+          </Botao>
+        </form>
+        <Resultado status={p.agente} detalhe={p.detalhe} />
       </div>
 
       {/* ========================================================= ledger */}
