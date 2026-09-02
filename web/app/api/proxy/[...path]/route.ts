@@ -45,6 +45,18 @@ async function repassar(
     body: corpoEnviado,
   });
 
+  // Nem toda rota devolve JSON: `/api/relatorio/markdown` devolve texto, e
+  // `chamarApi` deixa como string quando o parse falha. Empacotar isso em
+  // `NextResponse.json` entregaria o relatorio inteiro entre aspas, com as
+  // quebras de linha escapadas - ilegivel exatamente para quem o abriu para
+  // ler. Isto e transporte, nao regra de negocio (secao 10.2.1).
+  if (typeof corpo === "string") {
+    return new NextResponse(corpo, {
+      status,
+      headers: { "content-type": "text/markdown; charset=utf-8" },
+    });
+  }
+
   return NextResponse.json(corpo, { status });
 }
 

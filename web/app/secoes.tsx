@@ -31,6 +31,12 @@ export const BLOCOS: { bloco: string; secao: string }[] = [
   { bloco: "9 configuracao", secao: "#ajustes" },
 ];
 
+/** O que a secao 07 acrescenta, e que nao e bloco de §6 do 05-painel. */
+export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
+  { assunto: "relatorio de fechamento (incremento 7)", secao: "#fechamento" },
+  { assunto: "sentinela de persistencia (incremento 0)", secao: "#substrato" },
+];
+
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
   { id: "experimento", n: "01", titulo: "Executar", pergunta: "o que da para fazer agora?" },
   { id: "resultado", n: "02", titulo: "Resultado", pergunta: "o agente ganhou do acaso?" },
@@ -38,7 +44,8 @@ export const SECOES: { id: string; n: string; titulo: string; pergunta: string }
   { id: "execucao", n: "04", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
   { id: "dinheiro", n: "05", titulo: "Dinheiro", pergunta: "as contas fecham?" },
   { id: "ajustes", n: "06", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "substrato", n: "07", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  { id: "fechamento", n: "07", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "08", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {

@@ -225,6 +225,37 @@ type Comparacao = ComparacaoAviso & {
   };
 };
 
+/** O relatorio de fechamento. Nenhum campo daqui e calculado no painel. */
+type Relatorio = {
+  existe: boolean;
+  motivo?: string;
+  run?: { id: number; state: string };
+  refletiu?: { quantas: number; houve_cerebro: boolean };
+  reprodutibilidade?: {
+    mesma_semente: { digest_a: string; digest_b: string; iguais: boolean };
+    semente_diferente: { digest: string; difere_do_primeiro: boolean };
+    config_hash_igual_nas_tres: boolean;
+    provado: boolean;
+  } | null;
+  vinculo?: {
+    conferido?: boolean;
+    motivo?: string;
+    execution_id?: number;
+    evento_cognitivo?: number;
+    profundidade_da_cadeia?: number;
+    execucoes_autorizadas?: number;
+  };
+  integridade?: { ok: boolean };
+  resposta_da_0a?: {
+    pergunta: string;
+    condicoes: Record<string, boolean | null>;
+    faltando: string[];
+    fecha: boolean;
+    se_nao_fecha: string;
+  };
+  nao_concluido?: string[];
+};
+
 type Sentinelas = {
   total: number;
   items: { id: number; label: string; created_at: string }[];
@@ -347,6 +378,17 @@ async function rodarAgente() {
   paraPainel(status, corpo, "agente");
 }
 
+async function provarReprodutibilidade() {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/reprodutibilidade", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "reprodutibilidade");
+}
+
 async function adotarCatalogo(formData: FormData) {
   "use server";
   if (!(await temSessao())) redirect("/login");
@@ -393,7 +435,7 @@ export default async function Painel({
   const p = await searchParams;
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
-    simulador, execucoes, comparacao, agente, curva,
+    simulador, execucoes, comparacao, agente, curva, relatorio,
   ] = await Promise.all([
     chamarApi("/api/health"),
     chamarApi("/api/dataset"),
@@ -406,6 +448,7 @@ export default async function Painel({
     chamarApi("/api/comparacao"),
     chamarApi("/api/agente"),
     chamarApi("/api/curva"),
+    chamarApi("/api/relatorio"),
   ]);
 
   if (health.status !== 200) {
@@ -445,6 +488,7 @@ export default async function Painel({
   const cmp = comparacao.corpo as Comparacao;
   const ag = agente.corpo as Agente;
   const cv = curva.corpo as DadosDaCurva;
+  const rel = relatorio.status === 200 ? (relatorio.corpo as Relatorio) : null;
   const cfg = c?.config ?? null;
 
   const comparacaoVelha = cmp.existe && cmp.sob_a_config_vigente === false;
@@ -1443,6 +1487,195 @@ export default async function Painel({
       </Secao>
 
       {/* ================================================= 07 · SUBSTRATO */}
+      <Secao id="fechamento">
+        {/* O relatorio da 0A. Nenhum numero e calculado aqui: a resposta
+            inteira vem de /api/relatorio, onde ela e DERIVADA de doze
+            consultas ao banco. O painel so desenha (secao 10.2.1). */}
+        {!rel?.existe ? (
+          <div className="card">
+            <p className="sub" style={{ marginTop: 0 }}>
+              {rel?.motivo ?? "Relatorio indisponivel."} Rode o ciclo do agente
+              na secao <a href="#experimento">01</a> para que haja o que relatar.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div
+              className={rel.resposta_da_0a?.fecha ? "aviso ok" : "aviso warn"}
+              style={{ marginTop: 0 }}
+            >
+              <p style={{ marginTop: 0 }}>
+                <strong>{rel.resposta_da_0a?.pergunta}</strong>{" "}
+                {rel.resposta_da_0a?.fecha ? (
+                  <span className="good">Sim.</span>
+                ) : (
+                  <span className="bad">Ainda nao.</span>
+                )}
+              </p>
+              {rel.resposta_da_0a?.fecha ? (
+                <p className="sub" style={{ fontSize: 12.5, marginBottom: 0 }}>
+                  As doze condicoes abaixo foram conferidas contra o banco.
+                  Nenhuma delas e digitada: cada uma e um booleano que sai de
+                  uma consulta. Uma resposta em prosa sobreviveria a qualquer
+                  regressao futura sem mudar uma letra.
+                </p>
+              ) : (
+                <>
+                  <p className="sub" style={{ fontSize: 12.5 }}>
+                    {rel.resposta_da_0a?.se_nao_fecha}
+                  </p>
+                  <p className="sub" style={{ fontSize: 12.5, marginBottom: 0 }}>
+                    Falta: <code>{rel.resposta_da_0a?.faltando.join(", ")}</code>
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="grade">
+              <Card titulo="As doze condicoes">
+                <table>
+                  <tbody>
+                    {Object.entries(rel.resposta_da_0a?.condicoes ?? {}).map(
+                      ([nome, valor]) => (
+                        <tr key={nome}>
+                          <td>{nome.replace(/_/g, " ")}</td>
+                          <td className="num">
+                            <Pill ok={valor} indefinido="nao se aplica" />
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+                <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                  <strong>Nao se aplica nao e nao.</strong> Com o teto em zero
+                  nao ha custo de decisao a registrar (D23), e reprovar o run
+                  por essa ausencia confundiria "nao sei" com "nao" — a mesma
+                  confusao que a secao 5.2 proibe no custo.
+                </p>
+              </Card>
+
+              <Card titulo="Reprodutibilidade (R12)">
+                {rel.reprodutibilidade ? (
+                  <>
+                    <table>
+                      <tbody>
+                        <tr>
+                          <td>mesma semente, A</td>
+                          <td className="num">
+                            <Hash
+                              valor={rel.reprodutibilidade.mesma_semente.digest_a}
+                            />
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>mesma semente, B</td>
+                          <td className="num">
+                            <Hash
+                              valor={rel.reprodutibilidade.mesma_semente.digest_b}
+                            />
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>semente diferente, C</td>
+                          <td className="num">
+                            <Hash
+                              valor={
+                                rel.reprodutibilidade.semente_diferente.digest
+                              }
+                            />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div className="linha" style={{ gap: 8, marginTop: 10 }}>
+                      <Pill
+                        ok={rel.reprodutibilidade.mesma_semente.iguais}
+                        sim="A = B"
+                        nao="A != B"
+                      />
+                      <Pill
+                        ok={
+                          rel.reprodutibilidade.semente_diferente
+                            .difere_do_primeiro
+                        }
+                        sim="C diferente de A"
+                        nao="C igual a A"
+                      />
+                      <Pill
+                        ok={rel.reprodutibilidade.config_hash_igual_nas_tres}
+                        sim="mesmo config_hash"
+                        nao="config_hash mudou"
+                      />
+                    </div>
+                    <p className="sub" style={{ fontSize: 12, marginTop: 10 }}>
+                      As duas metades importam. Sem a segunda, um digest
+                      constante passaria na primeira sempre — inclusive quando
+                      nada estivesse sendo medido.
+                    </p>
+                  </>
+                ) : (
+                  <p className="sub" style={{ marginTop: 0 }}>
+                    Prova ainda nao rodada nesta base.
+                  </p>
+                )}
+                <form action={provarReprodutibilidade} style={{ marginTop: 10 }}>
+                  <Botao pendente="provando…">Rodar a prova</Botao>
+                </form>
+                <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                  Tres runs de B1 pelo ledger.{" "}
+                  <strong>Nenhuma chamada de LLM</strong> — a prova nao pode
+                  custar dinheiro nem depender de o cache estar quente.
+                </p>
+              </Card>
+
+              <Card titulo="Vinculo nos dois sentidos (R25.2)">
+                {rel.vinculo?.conferido ? (
+                  <p className="sub" style={{ marginTop: 0 }}>
+                    Da execucao <code>#{rel.vinculo.execution_id}</code>{" "}
+                    chega-se ao evento cognitivo{" "}
+                    <code>#{rel.vinculo.evento_cognitivo}</code>, subindo{" "}
+                    {rel.vinculo.profundidade_da_cadeia} niveis — e desse evento
+                    se volta a mesma execucao, entre as{" "}
+                    {rel.vinculo.execucoes_autorizadas} que a regra autorizou.
+                  </p>
+                ) : (
+                  <p className="sub" style={{ marginTop: 0 }}>
+                    {rel.vinculo?.motivo ?? "Nao conferido."}
+                  </p>
+                )}
+                <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                  Conferido nos dois sentidos de proposito: um vinculo que so
+                  funciona num deles passaria em duas consultas isoladas.
+                </p>
+              </Card>
+
+              <Card titulo="Relatorio completo">
+                <p className="sub" style={{ marginTop: 0 }}>
+                  As dez secoes, geradas do banco:{" "}
+                  <a href="/api/proxy/relatorio/markdown" target="_blank">
+                    abrir em Markdown
+                  </a>
+                  .
+                </p>
+                <details>
+                  <summary>o que a 0A nao conclui, em nenhuma hipotese</summary>
+                  <ul className="sub" style={{ fontSize: 12.5 }}>
+                    {(rel.nao_concluido ?? []).map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </details>
+                <details>
+                  <summary>JSON cru</summary>
+                  <pre>{JSON.stringify(rel, null, 2)}</pre>
+                </details>
+              </Card>
+            </div>
+          </>
+        )}
+      </Secao>
+
       <Secao id="substrato">
         <div className="duas">
           <Card titulo="Credenciais e volume">
