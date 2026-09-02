@@ -1,0 +1,209 @@
+/* Painel da Fase 0A.
+ *
+ * Descartavel por decisao (secao 10.4): nada aqui precisa sobreviver a Fase 1.
+ * Isso justifica ser simples, nao justifica ser confuso - o painel e como o
+ * experimento e observado, e observacao ruim leva a conclusao ruim.
+ *
+ * Monoespacada de proposito: quase todo dado desta tela e numero, hash ou
+ * timestamp, e alinhamento de coluna importa mais que elegancia.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --fundo: #0f1115;
+  --fundo-2: #161a21;
+  --fundo-3: #1d2532;
+  --borda: #232833;
+  --borda-forte: #2c3340;
+
+  --texto: #d7dbe0;
+  --fraco: #8b93a1;
+  --tenue: #6f7888;
+
+  --ok: #4ade80;
+  --ruim: #f87171;
+  --alerta: #fbbf24;
+  --destaque: #a5b4fc;
+
+  --raio: 8px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--fundo);
+  color: var(--texto);
+}
+
+main { max-width: 1100px; margin: 0 auto; padding: 0 20px 96px; }
+
+/* ------------------------------------------------------------- cabecalho */
+
+.topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 26px 0 18px;
+  border-bottom: 1px solid var(--borda);
+  margin-bottom: 4px;
+}
+
+.topo h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
+.topo .contexto { color: var(--tenue); font-size: 12px; display: flex; gap: 14px; }
+
+h2 {
+  font-size: 12px;
+  margin: 30px 0 10px;
+  color: var(--fraco);
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  font-weight: 600;
+}
+
+.sub { color: var(--fraco); margin: 0; }
+
+/* ----------------------------------------------------------------- cards */
+
+.card {
+  background: var(--fundo-2);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 14px 16px;
+}
+
+/* Duas colunas quando cabe. A pagina ficou longa demais com dataset,
+ * configuracao, ledger e sentinela empilhados. */
+.duas {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 860px) {
+  .duas { grid-template-columns: 1fr 1fr; }
+}
+
+.card h3 {
+  font-size: 12px;
+  margin: 0 0 10px;
+  color: var(--fraco);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------- tabelas */
+
+table { width: 100%; border-collapse: collapse; }
+td { padding: 5px 0; vertical-align: top; }
+td:first-child { color: var(--fraco); width: 42%; padding-right: 12px; }
+
+/* Numero alinha a direita e usa digitos de largura fixa: comparar valores
+ * empilhados e a razao de existir desta tabela. */
+td.num, .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+tr.total td { border-top: 1px solid var(--borda); padding-top: 8px; }
+
+/* --------------------------------------------------------------- estados */
+
+.ok { color: var(--ok); }
+.bad { color: var(--ruim); }
+.warn { color: var(--alerta); }
+
+/* Marcador de estado. Le-se muito mais rapido que "sim"/"nao" em texto. */
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid currentColor;
+  line-height: 1.5;
+}
+.pill.ok   { background: rgba(74, 222, 128, .10); }
+.pill.bad  { background: rgba(248, 113, 113, .10); }
+.pill.warn { background: rgba(251, 191, 36, .10); }
+.pill.neutro { color: var(--tenue); background: transparent; }
+
+/* --------------------------------------------------------------- avisos */
+
+.aviso {
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  border: 1px solid;
+  font-size: 13px;
+}
+.aviso.ok   { border-color: rgba(74, 222, 128, .35); background: rgba(74, 222, 128, .07); }
+.aviso.bad  { border-color: rgba(248, 113, 113, .35); background: rgba(248, 113, 113, .07); }
+.aviso.warn { border-color: rgba(251, 191, 36, .35); background: rgba(251, 191, 36, .07); }
+.aviso p { margin: 0 0 4px; }
+
+/* O JSON cru continua acessivel, mas parou de dominar a tela. */
+details { margin-top: 8px; }
+summary { cursor: pointer; color: var(--fraco); font-size: 12px; }
+summary:hover { color: var(--texto); }
+details pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+  font-size: 12px;
+  margin: 8px 0 0;
+  color: var(--fraco);
+  max-height: 260px;
+}
+
+/* ------------------------------------------------------------ formularios */
+
+input, button, textarea, select {
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--borda-forte);
+  background: var(--fundo);
+  color: var(--texto);
+}
+input:focus, textarea:focus { outline: 1px solid var(--destaque); border-color: var(--destaque); }
+
+button {
+  cursor: pointer;
+  border-color: #3a4252;
+  background: var(--fundo-3);
+  white-space: nowrap;
+}
+button:hover:not(:disabled) { background: #253044; }
+button:disabled { opacity: .55; cursor: progress; }
+
+.forma { display: grid; gap: 8px; margin-top: 12px; }
+.linha { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+label.caixa {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--fraco);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- rodape */
+
+footer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #0b0d11;
+  border-top: 1px solid var(--borda);
+  color: var(--tenue);
+  font-size: 12px;
+  padding: 9px 20px;
+  text-align: center;
+}
+
+code { color: var(--destaque); }
+.hash { color: var(--destaque); font-size: 12px; }
