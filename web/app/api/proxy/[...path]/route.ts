@@ -5,9 +5,13 @@ import { temSessao } from "@/lib/auth";
 /**
  * Proxy puro para a `api`.
  *
- * O navegador nunca fala com a `api` diretamente: em producao ela nao tem
- * dominio publico e vive em `*.railway.internal`, que codigo de navegador
- * nao resolve. Esta rota acrescenta o token de servico e encaminha.
+ * O navegador nunca fala com a `api` diretamente. Ela TEM dominio publico
+ * (ADR 0010 - o painel vive na Vercel e a alcanca pela internet), mas exige
+ * token de servico em toda rota, e esse token nao pode chegar ao navegador.
+ * Esta rota roda no servidor, acrescenta o token e encaminha.
+ *
+ * Efeito colateral util: como a chamada e servidor-para-servidor, ela nao
+ * passa por CORS.
  *
  * Sem logica de negocio aqui (secao 10.2.1).
  */
