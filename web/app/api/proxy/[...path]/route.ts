@@ -3,6 +3,16 @@ import { chamarApi } from "@/lib/api";
 import { temSessao } from "@/lib/auth";
 
 /**
+ * A ingestao do dataset baixa ~46 arquivos da Binance numa unica requisicao:
+ * medido em 34s a partir do Brasil, e a Railway fica bem mais perto da borda
+ * CloudFront que atende. Os 10s padrao da Vercel nao bastam.
+ *
+ * Se ainda assim estourar, nao ha estrago: a ingestao e atomica (rollback) e
+ * idempotente (ADR 0012, criterio 2), entao repetir e seguro.
+ */
+export const maxDuration = 60;
+
+/**
  * Proxy puro para a `api`.
  *
  * O navegador nunca fala com a `api` diretamente. Ela TEM dominio publico

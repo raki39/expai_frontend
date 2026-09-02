@@ -1,10 +1,9 @@
 /**
  * Cliente da `api`, usado APENAS no servidor.
  *
- * Em producao aponta para a rede privada da Railway
- * (`http://<servico>.railway.internal:<porta>`), que o navegador nao resolve.
- * E isso que permite a `api` nao ter dominio publico e o token de servico
- * nunca sair daqui.
+ * Em producao aponta para o dominio publico da api na Railway (ADR 0010).
+ * O que mantem o token de servico fora do navegador nao e a topologia de
+ * rede: e o fato de este modulo so rodar no servidor da Vercel.
  *
  * Este modulo nao contem regra de negocio: a `api` e a unica autoridade
  * (secao 10.2.1 - "o Painel nao contem logica de negocio: nenhuma").

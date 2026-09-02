@@ -25,6 +25,26 @@ type Sentinelas = {
   items: { id: number; label: string; created_at: string }[];
 };
 
+type Dataset = {
+  existe: boolean;
+  dataset_id?: number;
+  venue?: string;
+  symbol?: string;
+  timeframe?: string;
+  sha256?: string;
+  fidelity_level?: number;
+  barras_total?: number;
+  barras_disponiveis?: number;
+  barras_reservadas?: number;
+  reserved_from_ms?: number;
+  start_ms?: number;
+  end_ms?: number;
+};
+
+function utc(ms?: number) {
+  return ms === undefined ? "—" : new Date(ms).toISOString().replace(".000Z", "Z");
+}
+
 /** Grava uma sentinela: e o que prova que o volume sobrevive ao redeploy. */
 async function gravarSentinela(formData: FormData) {
   "use server";
@@ -39,15 +59,43 @@ async function gravarSentinela(formData: FormData) {
   revalidatePath("/");
 }
 
+/**
+ * Dispara a ingestao unica. O resultado - inclusive o relatorio de lacunas
+ * quando a api recusa - fica no `searchParams` para a proxima renderizacao.
+ */
+async function ingerirDataset(formData: FormData) {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/dataset/ingest", {
+    method: "POST",
+    body: JSON.stringify({
+      author: "painel",
+      aceitar_lacunas: formData.get("aceitar_lacunas") === "on",
+    }),
+  });
+  revalidatePath("/");
+  redirect(
+    `/?ingestao=${status}&detalhe=${encodeURIComponent(
+      JSON.stringify(corpo).slice(0, 1500),
+    )}`,
+  );
+}
+
 function Sim({ v }: { v: boolean }) {
   return <span className={v ? "ok" : "bad"}>{v ? "sim" : "nao"}</span>;
 }
 
-export default async function Painel() {
+export default async function Painel({
+  searchParams,
+}: {
+  searchParams: Promise<{ ingestao?: string; detalhe?: string }>;
+}) {
   if (!(await temSessao())) redirect("/login");
 
+  const { ingestao, detalhe } = await searchParams;
   const health = await chamarApi("/api/health");
   const sentinelas = await chamarApi("/api/sentinel");
+  const dataset = await chamarApi("/api/dataset");
 
   if (health.status !== 200) {
     return (
@@ -74,11 +122,12 @@ export default async function Painel() {
 
   const h = health.corpo as Health;
   const s = sentinelas.corpo as Sentinelas;
+  const d = dataset.corpo as Dataset;
 
   return (
     <>
       <h1>Fase 0A — painel</h1>
-      <p className="sub">Incremento 0 — substrato</p>
+      <p className="sub">Incrementos 0 e 1 — substrato e dataset</p>
 
       <h2>Substrato</h2>
       <div className="card">
@@ -133,6 +182,78 @@ export default async function Painel() {
         <p className="sub" style={{ margin: "10px 0 0" }}>
           Presenca da credencial, nunca o valor (secao 10.2.4).
         </p>
+      </div>
+
+      <h2>Dataset</h2>
+      <div className="card">
+        {d.existe ? (
+          <table>
+            <tbody>
+              <tr>
+                <td>instrumento</td>
+                <td>
+                  <code>
+                    {d.venue}:{d.symbol} {d.timeframe}
+                  </code>
+                </td>
+              </tr>
+              <tr><td>sha256</td><td><code>{d.sha256?.slice(0, 16)}…</code></td></tr>
+              <tr><td>fidelidade</td><td>{d.fidelity_level}</td></tr>
+              <tr><td>primeira barra</td><td>{utc(d.start_ms)}</td></tr>
+              <tr><td>ultima barra</td><td>{utc(d.end_ms)}</td></tr>
+              <tr><td>barras (total)</td><td>{d.barras_total?.toLocaleString("pt-BR")}</td></tr>
+              <tr>
+                <td>disponiveis</td>
+                <td>{d.barras_disponiveis?.toLocaleString("pt-BR")}</td>
+              </tr>
+              <tr>
+                <td>reservadas</td>
+                <td>
+                  {d.barras_reservadas?.toLocaleString("pt-BR")}{" "}
+                  <span className="sub">a partir de {utc(d.reserved_from_ms)}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        ) : (
+          <p className="sub" style={{ marginTop: 0 }}>
+            Dataset ainda nao ingerido.
+          </p>
+        )}
+
+        <p className="sub" style={{ margin: "12px 0 8px" }}>
+          A ingestao e unica e idempotente: repetir com os mesmos dados nao
+          duplica nem sobrescreve nada. Leva algumas dezenas de segundos.
+          Lacuna na serie faz a api <strong>recusar</strong> — marque a caixa
+          para aceitar o relatorio explicitamente.
+        </p>
+        <form action={ingerirDataset} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <button type="submit">
+            {d.existe ? "Reexecutar ingestao" : "Ingerir dataset"}
+          </button>
+          <label className="sub" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="checkbox" name="aceitar_lacunas" />
+            aceitar lacunas
+          </label>
+        </form>
+
+        {ingestao ? (
+          <div style={{ marginTop: 12 }}>
+            <p className={ingestao === "201" ? "ok" : "bad"} style={{ margin: 0 }}>
+              HTTP {ingestao}
+            </p>
+            <pre
+              style={{
+                whiteSpace: "pre-wrap",
+                overflowX: "auto",
+                fontSize: 12,
+                margin: "6px 0 0",
+              }}
+            >
+              {detalhe}
+            </pre>
+          </div>
+        ) : null}
       </div>
 
       <h2>Sentinela de persistencia</h2>
