@@ -12,6 +12,7 @@ type Health = {
   db_path: string;
   db_path_absoluto: boolean;
   volume_gravavel: boolean;
+  volume_montado: boolean | null;
   schema_version: number;
   config_version: number | null;
   config_hash: string | null;
@@ -60,11 +61,11 @@ export default async function Painel() {
             {JSON.stringify(health.corpo, null, 2)}
           </pre>
           <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
-            Em producao, confira: o servico <code>api</code> ligado em{" "}
-            <code>::</code> (a rede privada resolve IPv6), o{" "}
-            <code>API_BASE_URL</code> apontando para{" "}
-            <code>*.railway.internal</code> com <code>http</code>, e o{" "}
-            <code>API_SERVICE_TOKEN</code> igual nos dois servicos.
+            Confira, nesta ordem: <code>API_BASE_URL</code> com{" "}
+            <code>https://</code> e sem barra no final;{" "}
+            <code>API_SERVICE_TOKEN</code> identico na Vercel e na Railway; e o
+            log de pre-voo da api mostrando <code>host</code> e{" "}
+            <code>port</code> batendo com o target port do dominio.
           </p>
         </div>
       </>
@@ -88,6 +89,22 @@ export default async function Painel() {
             <tr><td>banco</td><td><code>{h.db_path}</code></td></tr>
             <tr><td>caminho absoluto</td><td><Sim v={h.db_path_absoluto} /></td></tr>
             <tr><td>volume gravavel</td><td><Sim v={h.volume_gravavel} /></td></tr>
+            <tr>
+              <td>volume montado</td>
+              <td>
+                {h.volume_montado === null ? (
+                  <span className="sub">nao aplicavel</span>
+                ) : (
+                  <Sim v={h.volume_montado} />
+                )}
+                {h.volume_montado === false ? (
+                  <div className="bad" style={{ marginTop: 4 }}>
+                    Gravavel mas NAO persistente: e diretorio da imagem. O
+                    banco some no proximo deploy.
+                  </div>
+                ) : null}
+              </td>
+            </tr>
             <tr><td>versao do schema</td><td>{h.schema_version}</td></tr>
             <tr><td>run ativo</td><td>{h.run_ativo ?? "nenhum"}</td></tr>
           </tbody>
