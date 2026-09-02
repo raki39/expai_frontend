@@ -79,6 +79,14 @@ type Agente = {
     expectation: string | null;
     confidence_ppm: number | null;
   } | null;
+  patrimonio_final_cents?: number;
+  operacoes?: number;
+  config_version_id?: number;
+  custos_cents?: {
+    execucao_total: number;
+    reflexao_total: number;
+    posicao_aberta: number;
+  };
   gasto: {
     chamadas_com_custo: number;
     gasto_cents: number;
@@ -181,7 +189,13 @@ type Execucoes = {
   }[];
 };
 
-type Comparacao = {
+type ComparacaoAviso = {
+  sob_a_config_vigente?: boolean | null;
+  config_version_vigente?: number;
+  config_versions_da_comparacao?: number[];
+};
+
+type Comparacao = ComparacaoAviso & {
   existe: boolean;
   aviso?: string;
   condicoes_validade?: string;
@@ -472,6 +486,24 @@ export default async function Painel({
       {/* ==================================================== comparacao */}
       <h2>Comparacao com os baselines</h2>
       <div className="card">
+        {/* Alteracao material cria versao nova e invalida comparacao que a
+            atravesse. Sem este aviso, o painel mostraria numeros de um
+            experimento ao lado da configuracao de outro. */}
+        {cmp.existe && cmp.sob_a_config_vigente === false ? (
+          <div className="aviso bad" style={{ marginBottom: 12 }}>
+            <p style={{ marginBottom: 0 }}>
+              Esta comparacao rodou sob a{" "}
+              <strong>
+                config_version {cmp.config_versions_da_comparacao?.join(", ")}
+              </strong>
+              , e a vigente e a{" "}
+              <strong>{cmp.config_version_vigente}</strong>. Alteracao material
+              invalida comparacao que a atravesse (secao 10.2.3):{" "}
+              <strong>estes numeros nao descrevem a configuracao atual.</strong>{" "}
+              Reexecute a comparacao antes de compara-la com qualquer coisa.
+            </p>
+          </div>
+        ) : null}
         {cmp.existe && cmp.B1 && cmp.B3 && cmp.B2 ? (
           <div style={{ overflowX: "auto" }}>
             <table>
@@ -609,6 +641,53 @@ export default async function Painel({
                 </tr>
               </tbody>
             </table>
+
+            {ag.patrimonio_final_cents !== undefined ? (
+              <table style={{ marginTop: 12 }}>
+                <tbody>
+                  <tr className="total">
+                    <td style={{ width: "auto" }}>
+                      <strong>patrimonio final do agente</strong>
+                      <span className="sub">
+                        {" "}· run {ag.run_id}, config_version{" "}
+                        {ag.config_version_id}
+                      </span>
+                    </td>
+                    <td className="num">
+                      <Dinheiro minor={ag.patrimonio_final_cents} moeda="USD" />
+                    </td>
+                    <td className="num">
+                      {(ag.operacoes ?? 0).toLocaleString("pt-BR")} operacoes
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="sub">custo de execucao</td>
+                    <td className="num sub">
+                      <Dinheiro
+                        minor={ag.custos_cents?.execucao_total}
+                        moeda="USD"
+                      />
+                    </td>
+                    <td className="sub">
+                      taxa, spread, slippage e penalidade
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="sub">custo de reflexao</td>
+                    <td className="num sub">
+                      <Dinheiro
+                        minor={ag.custos_cents?.reflexao_total}
+                        moeda="USD"
+                      />
+                    </td>
+                    <td className="sub">
+                      o agente paga pelo proprio pensamento — os baselines nao
+                      pagam nada
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : null}
 
             {ag.regra_ativa ? (
               <div className="aviso ok" style={{ marginTop: 12 }}>
