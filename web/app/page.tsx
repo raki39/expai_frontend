@@ -23,6 +23,7 @@ type Health = {
   schema_version: number;
   config_version: number | null;
   config_hash: string | null;
+  config_hash_confere: boolean | null;
   run_ativo: number | null;
   credenciais_configuradas: { anthropic: boolean; openai: boolean };
 };
@@ -682,7 +683,12 @@ export default async function Painel({
               <tr>
                 <td>config_hash</td>
                 <td>
-                  <Hash valor={h.config_hash} />
+                  <Hash valor={h.config_hash} />{" "}
+                  {/* O hash gravado ainda descreve esta config? Se parou de
+                      descrever, ele deixou de identificar o que diz. */}
+                  {h.config_hash_confere === false ? (
+                    <span className="pill bad">NAO DESCREVE MAIS</span>
+                  ) : null}
                 </td>
               </tr>
               <tr>
