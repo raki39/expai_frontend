@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "conferir-escopo": "node scripts/conferir-escopo.mjs"
   },
   "dependencies": {
     "next": "16.3.4",
