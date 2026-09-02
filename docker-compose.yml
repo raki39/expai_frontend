@@ -1,0 +1,29 @@
+# Fase 0A - servico `web` (painel), desenvolvimento LOCAL.
+#
+# A Vercel NAO usa este arquivo nem o Dockerfile: ela constroi Next.js com o
+# pipeline proprio, em funcoes serverless. Isto existe para rodar o painel
+# localmente em container, com paridade de runtime.
+#
+#   docker compose up --build      painel em http://localhost:3000
+#
+# Requer web/.env.local preenchido (copie de web/.env.example) e a `api`
+# rodando na porta 8000 do host - pelo compose do repositorio `backend`.
+
+services:
+  web:
+    build:
+      context: ./web
+    env_file:
+      - ./web/.env.local
+    environment:
+      PORT: "3000"
+      # Os dois repositorios sobem em compose separados, logo em redes
+      # separadas. `host.docker.internal` alcanca a porta 8000 do host, que e
+      # onde o compose do backend publica a api.
+      API_BASE_URL: ${API_BASE_URL:-http://host.docker.internal:8000}
+    extra_hosts:
+      # Necessario no Linux; no Windows e no Mac ja existe por padrao.
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
