@@ -784,6 +784,10 @@ export default async function Painel({
             </table>
           </div>
 
+          {/* Quatro faixas, e nao tres. "Abaixo da mediana" para quem esta
+              abaixo do p5 e verdade e subestima: perder de 95% do acaso e
+              afirmacao diferente de perder de 51%, e arredondar a leitura para
+              o lado confortavel e a mesma doenca de sempre. */}
           {ag.b1_casado && ag.patrimonio_final_cents !== undefined ? (
             <div
               className={`aviso ${
@@ -801,9 +805,20 @@ export default async function Painel({
                     ? "acima do p95"
                     : ag.patrimonio_final_cents > ag.b1_casado.p50
                       ? "entre a mediana e o p95"
-                      : "abaixo da mediana"}
+                      : ag.patrimonio_final_cents >= ag.b1_casado.p5
+                        ? "entre o p5 e a mediana"
+                        : "abaixo do p5"}
                 </strong>{" "}
-                da distribuicao do acaso com o mesmo giro.{" "}
+                da distribuicao do acaso com o mesmo giro e o mesmo tamanho de
+                posicao.
+                {ag.patrimonio_final_cents < ag.b1_casado.p5 ? (
+                  <>
+                    {" "}
+                    Ou seja: <strong>mais de 95% das entradas ao acaso</strong>,
+                    com esse mesmo giro e esse mesmo dimensionamento, teriam
+                    terminado melhor.
+                  </>
+                ) : null}{" "}
                 <strong>Isto e leitura, nao conclusao</strong> — e o resultado e
                 em amostra, porque o cerebro observou a mesma janela em que
                 operou.

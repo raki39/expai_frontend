@@ -110,7 +110,11 @@ export function Curva({
   const linha = (p: Ponto[]) =>
     p.map((q) => `${px(q.t).toFixed(1)},${py(q.patrimonio_cents).toFixed(1)}`).join(" ");
 
-  const marcas = [y0, (y0 + y1) / 2, y1].map(Math.round);
+  // Rotulos nos extremos do DADO, e nao do dominio. O dominio tem margem
+  // para a linha nao encostar na borda, e rotular a margem punha na tela um
+  // "US$ 9" que nao corresponde a valor nenhum da serie - um eixo que
+  // descreve o desenho em vez de descrever o dado.
+  const marcas = [min, Math.round((min + max) / 2), max];
 
   return (
     <div style={{ overflowX: "auto" }}>
