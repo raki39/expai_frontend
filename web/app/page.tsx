@@ -55,6 +55,7 @@ type ConfigResposta = {
     data_start: string;
     data_end: string;
     reserved_fraction: string;
+    execution_reference: string;
     seed_capital_usd_cents: number;
     fx_brl_per_usd: string;
     fx_rate_date: string;
@@ -206,6 +207,20 @@ async function alterarConfig(formData: FormData) {
       author: String(formData.get("author") ?? "").trim(),
       note: String(formData.get("note") ?? "").trim(),
       changes,
+    }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "config");
+}
+
+/** Regrava a config vigente sob o hash correto, apos mudanca de schema. */
+async function reancorarConfig(formData: FormData) {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/config/reancorar", {
+    method: "POST",
+    body: JSON.stringify({
+      author: String(formData.get("author") ?? "painel").trim() || "painel",
     }),
   });
   revalidatePath("/");
@@ -845,6 +860,12 @@ export default async function Painel({
                 <td className="num">{cfg?.reserved_fraction ?? "—"}</td>
               </tr>
               <tr>
+                <td>referencia da execucao</td>
+                <td>
+                  <code>{cfg?.execution_reference ?? "—"}</code>
+                </td>
+              </tr>
+              <tr>
                 <td>capital semente</td>
                 <td className="num">
                   <Dinheiro minor={cfg?.seed_capital_usd_cents} moeda="USD" />
@@ -905,6 +926,28 @@ export default async function Painel({
           </p>
         </Card>
       </div>
+
+      {h.config_hash_confere === false ? (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="aviso bad" style={{ marginTop: 0 }}>
+            <p>
+              <strong>O config_hash deixou de descrever a configuracao.</strong>{" "}
+              O schema mudou depois desta versao ter sido gravada, entao o hash
+              continua ali mas nao identifica mais o que diz identificar.
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              Abrir run esta <strong>bloqueado</strong> — rodar assim faria dois
+              runs reportarem o mesmo hash com configuracoes diferentes.
+              Reancorar regrava a config vigente sob o hash correto e registra
+              a mudanca de schema campo por campo. <strong>Nenhum valor muda.</strong>
+            </p>
+          </div>
+          <form action={reancorarConfig} className="linha" style={{ marginTop: 12 }}>
+            <input name="author" placeholder="autor" required style={{ flex: 1 }} />
+            <Botao pendente="reancorando…">Reancorar configuracao</Botao>
+          </form>
+        </div>
+      ) : null}
 
       <Card>
         <p className="sub" style={{ margin: "0 0 4px", fontSize: 12 }}>
