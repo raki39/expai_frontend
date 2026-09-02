@@ -41,6 +41,20 @@ type Dataset = {
   end_ms?: number;
 };
 
+type ConfigResposta = {
+  version_id: number;
+  config_hash: string;
+  congelada: boolean;
+  config: {
+    market_venue: string;
+    market_symbol: string;
+    timeframe: string;
+    data_start: string;
+    data_end: string;
+    reserved_fraction: string;
+  };
+};
+
 function utc(ms?: number) {
   return ms === undefined ? "—" : new Date(ms).toISOString().replace(".000Z", "Z");
 }
@@ -81,6 +95,32 @@ async function ingerirDataset(formData: FormData) {
   );
 }
 
+/**
+ * Cria uma nova versao de configuracao (ADR 0008).
+ *
+ * O painel nao valida nada: manda o JSON e mostra a resposta. Quem decide o
+ * que e valido, o que e material e o que excede o teto e a api (secao
+ * 10.2.1 - "o Painel nao contem logica de negocio: nenhuma").
+ */
+async function alterarConfig(formData: FormData) {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/config", {
+    method: "POST",
+    body: JSON.stringify({
+      author: String(formData.get("author") ?? "").trim(),
+      note: String(formData.get("note") ?? "").trim(),
+      changes: JSON.parse(String(formData.get("changes") ?? "{}")),
+    }),
+  });
+  revalidatePath("/");
+  redirect(
+    `/?config=${status}&detalhe=${encodeURIComponent(
+      JSON.stringify(corpo).slice(0, 1500),
+    )}`,
+  );
+}
+
 function Sim({ v }: { v: boolean }) {
   return <span className={v ? "ok" : "bad"}>{v ? "sim" : "nao"}</span>;
 }
@@ -88,14 +128,19 @@ function Sim({ v }: { v: boolean }) {
 export default async function Painel({
   searchParams,
 }: {
-  searchParams: Promise<{ ingestao?: string; detalhe?: string }>;
+  searchParams: Promise<{
+    ingestao?: string;
+    config?: string;
+    detalhe?: string;
+  }>;
 }) {
   if (!(await temSessao())) redirect("/login");
 
-  const { ingestao, detalhe } = await searchParams;
+  const { ingestao, config: configStatus, detalhe } = await searchParams;
   const health = await chamarApi("/api/health");
   const sentinelas = await chamarApi("/api/sentinel");
   const dataset = await chamarApi("/api/dataset");
+  const config = await chamarApi("/api/config");
 
   if (health.status !== 200) {
     return (
@@ -123,6 +168,9 @@ export default async function Painel({
   const h = health.corpo as Health;
   const s = sentinelas.corpo as Sentinelas;
   const d = dataset.corpo as Dataset;
+  const c = config.status === 200 ? (config.corpo as ConfigResposta) : null;
+  const cfg = c?.config ?? null;
+  const congelada = c?.congelada ?? false;
 
   return (
     <>
@@ -182,6 +230,61 @@ export default async function Painel({
         <p className="sub" style={{ margin: "10px 0 0" }}>
           Presenca da credencial, nunca o valor (secao 10.2.4).
         </p>
+
+        {cfg ? (
+          <>
+            <table style={{ marginTop: 14 }}>
+              <tbody>
+                <tr><td>janela de dados</td><td><code>{cfg.data_start} → {cfg.data_end}</code> <span className="sub">(fim exclusivo)</span></td></tr>
+                <tr><td>instrumento</td><td><code>{cfg.market_venue}:{cfg.market_symbol} {cfg.timeframe}</code></td></tr>
+                <tr><td>fracao reservada</td><td>{cfg.reserved_fraction}</td></tr>
+                <tr><td>congelada</td><td><Sim v={congelada} /></td></tr>
+              </tbody>
+            </table>
+
+            <p className="sub" style={{ margin: "14px 0 8px" }}>
+              Alterar cria uma <strong>nova versao</strong> com autor, data,
+              valor anterior e novo (secao 10.2.3). Nada e sobrescrito.
+              Alteracao material invalida comparacao com runs anteriores.
+            </p>
+            <form action={alterarConfig} style={{ display: "grid", gap: 8 }}>
+              <input name="author" placeholder="autor" required />
+              <input name="note" placeholder="motivo da mudanca" />
+              <textarea
+                name="changes"
+                rows={3}
+                required
+                spellCheck={false}
+                defaultValue={'{"data_start": "2024-08-01", "data_end": "2026-08-01"}'}
+                style={{ fontFamily: "monospace", fontSize: 12 }}
+              />
+              <button type="submit" style={{ justifySelf: "start" }}>
+                Criar nova versao
+              </button>
+            </form>
+
+            {configStatus ? (
+              <div style={{ marginTop: 12 }}>
+                <p
+                  className={configStatus === "201" ? "ok" : "bad"}
+                  style={{ margin: 0 }}
+                >
+                  HTTP {configStatus}
+                </p>
+                <pre
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    overflowX: "auto",
+                    fontSize: 12,
+                    margin: "6px 0 0",
+                  }}
+                >
+                  {detalhe}
+                </pre>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
 
       <h2>Dataset</h2>
