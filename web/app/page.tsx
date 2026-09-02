@@ -100,6 +100,7 @@ type Agente = {
     run_id: number;
     repeticoes: number;
     operacoes_alvo: number;
+    fracao_bps?: number | null;
     p5: number;
     p50: number;
     p95: number;
@@ -695,8 +696,9 @@ export default async function Painel({
                       <strong>B1 casado</strong> · p50
                     </td>
                     <td className="sub">
-                      o acaso com <strong>o mesmo giro do agente</strong>. E o
-                      unico B1 comparavel com ele (D19)
+                      o acaso com <strong>o mesmo giro e o mesmo tamanho de
+                      posicao</strong> do agente. E o unico B1 comparavel com
+                      ele (D19, secao 14.3)
                     </td>
                     <td className="num">
                       <Dinheiro minor={ag.b1_casado.p50} moeda="USD" />
@@ -711,7 +713,10 @@ export default async function Painel({
                     <td className="sub">B1 casado · p5 → p95</td>
                     <td className="sub">
                       {ag.b1_casado.repeticoes.toLocaleString("pt-BR")}{" "}
-                      repeticoes
+                      repeticoes ·{" "}
+                      {ag.b1_casado.fracao_bps != null
+                        ? `${ag.b1_casado.fracao_bps / 100}% do caixa`
+                        : "fracao nao registrada"}
                     </td>
                     <td className="num sub">
                       <Dinheiro minor={ag.b1_casado.p5} moeda="USD" /> →{" "}
