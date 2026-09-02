@@ -128,6 +128,24 @@ type Execucoes = {
   }[];
 };
 
+type Comparacao = {
+  existe: boolean;
+  aviso?: string;
+  condicoes_validade?: string;
+  B2?: { run_id: number; equity_final_cents: number; execucoes: number; digest: string };
+  B3?: { run_id: number; equity_final_cents: number; execucoes: number; digest: string };
+  B1_representativa?: { run_id: number; equity_final_cents: number };
+  B1?: {
+    repeticoes: number;
+    operacoes_alvo: number;
+    p5: number;
+    p50: number;
+    p95: number;
+    minimo: number;
+    maximo: number;
+  };
+};
+
 type Sentinelas = {
   total: number;
   items: { id: number; label: string; created_at: string }[];
@@ -214,6 +232,17 @@ async function encerrarRun(formData: FormData) {
   paraPainel(status, corpo, "run");
 }
 
+async function rodarComparacao() {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/comparacao", {
+    method: "POST",
+    body: JSON.stringify({ author: "painel" }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "comparacao");
+}
+
 async function gravarSentinela(formData: FormData) {
   "use server";
   if (!(await temSessao())) redirect("/login");
@@ -236,13 +265,14 @@ export default async function Painel({
     ingestao?: string;
     config?: string;
     run?: string;
+    comparacao?: string;
     detalhe?: string;
   }>;
 }) {
   if (!(await temSessao())) redirect("/login");
 
   const p = await searchParams;
-  const [health, dataset, config, ledger, transacoes, sentinelas, simulador, execucoes] =
+  const [health, dataset, config, ledger, transacoes, sentinelas, simulador, execucoes, comparacao] =
     await Promise.all([
       chamarApi("/api/health"),
       chamarApi("/api/dataset"),
@@ -252,6 +282,7 @@ export default async function Painel({
       chamarApi("/api/sentinel"),
       chamarApi("/api/simulador"),
       chamarApi("/api/execucoes?limite=10"),
+      chamarApi("/api/comparacao"),
     ]);
 
   if (health.status !== 200) {
@@ -286,6 +317,7 @@ export default async function Painel({
   const s = sentinelas.corpo as Sentinelas;
   const sim = simulador.corpo as Simulador;
   const exec = (execucoes.corpo as Execucoes)?.items ?? [];
+  const cmp = comparacao.corpo as Comparacao;
   const cfg = c?.config ?? null;
 
   const tudoConfere =
@@ -341,6 +373,92 @@ export default async function Painel({
         </div>
         <Resultado status={p.run} detalhe={p.detalhe} />
       </Card>
+
+      {/* ==================================================== comparacao */}
+      <h2>Comparacao com os baselines</h2>
+      <div className="card">
+        {cmp.existe && cmp.B1 && cmp.B3 && cmp.B2 ? (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <tbody>
+                <tr>
+                  <td className="sub">baseline</td>
+                  <td className="sub">o que mede</td>
+                  <td className="sub">patrimonio final</td>
+                  <td className="sub">operacoes</td>
+                </tr>
+                <tr>
+                  <td style={{ width: "auto" }}><strong>B2</strong> buy and hold</td>
+                  <td className="sub">se ha ganho sobre exposicao passiva</td>
+                  <td className="num"><Dinheiro minor={cmp.B2.equity_final_cents} moeda="USD" /></td>
+                  <td className="num">1</td>
+                </tr>
+                <tr>
+                  <td><strong>B3</strong> SMA {cfg ? "20/50" : ""}</td>
+                  <td className="sub">se ha ganho sobre uma regra trivial</td>
+                  <td className="num"><Dinheiro minor={cmp.B3.equity_final_cents} moeda="USD" /></td>
+                  <td className="num">{Math.floor(cmp.B3.execucoes / 2)}</td>
+                </tr>
+                <tr>
+                  <td><strong>B1</strong> aleatorio · p50</td>
+                  <td className="sub">quanto do resultado e sorte</td>
+                  <td className="num"><Dinheiro minor={cmp.B1.p50} moeda="USD" /></td>
+                  <td className="num">{cmp.B1.operacoes_alvo}</td>
+                </tr>
+                <tr>
+                  <td className="sub">B1 · p5 → p95</td>
+                  <td className="sub">
+                    {cmp.B1.repeticoes.toLocaleString("pt-BR")} repeticoes, giro
+                    casado com o de B3
+                  </td>
+                  <td className="num sub">
+                    <Dinheiro minor={cmp.B1.p5} moeda="USD" /> →{" "}
+                    <Dinheiro minor={cmp.B1.p95} moeda="USD" />
+                  </td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+
+            {/* A leitura que importa: B3 esta acima ou abaixo do acaso? */}
+            <div
+              className={`aviso ${
+                cmp.B3.equity_final_cents > cmp.B1.p95 ? "ok" : "warn"
+              }`}
+            >
+              <p style={{ marginBottom: 0 }}>
+                B3 esta{" "}
+                <strong>
+                  {cmp.B3.equity_final_cents > cmp.B1.p95
+                    ? "acima do p95"
+                    : cmp.B3.equity_final_cents > cmp.B1.p50
+                      ? "entre a mediana e o p95"
+                      : "abaixo da mediana"}
+                </strong>{" "}
+                da distribuicao de B1, com o mesmo giro. Isto e leitura, nao
+                conclusao: a Fase 0A nao conclui nada.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="sub" style={{ marginTop: 0 }}>
+            Comparacao ainda nao executada.
+          </p>
+        )}
+
+        <p className="sub" style={{ margin: "14px 0 0", fontSize: 12 }}>
+          Os tres rodam sobre a mesma janela, com o mesmo simulador, as mesmas
+          taxas e o mesmo dimensionamento. <strong>Nenhum LLM e envolvido</strong>
+          {" "}— se o encanamento nao fecha sem o modelo, o problema nao e o
+          modelo. Exige dataset ingerido e nenhum run ativo.
+        </p>
+        <form action={rodarComparacao} className="linha" style={{ marginTop: 10 }}>
+          <Botao pendente="rodando B1, B2 e B3…">
+            {cmp.existe ? "Reexecutar comparacao" : "Rodar comparacao"}
+          </Botao>
+        </form>
+        <Resultado status={p.comparacao} detalhe={p.detalhe} />
+      </div>
 
       {/* ========================================================= ledger */}
       <h2>Ledger e carteira</h2>
