@@ -64,6 +64,8 @@ type ConfigResposta = {
 
 type Ledger = {
   run_ativo: number | null;
+  escopo?: "run" | "livro_inteiro";
+  runs_somados?: number;
   eventos: number;
   transacoes: number;
   carteira: {
@@ -479,6 +481,23 @@ export default async function Painel({
 
       {/* ========================================================= ledger */}
       <h2>Ledger e carteira</h2>
+      {/* Sem run ativo o que vem e a soma de TODOS os runs. Numero legitimo,
+          mas responde outra pergunta - e sem o rotulo alguem le a soma de
+          duas comparacoes como se fosse a carteira. */}
+      <p className="sub" style={{ margin: "0 0 10px", fontSize: 12 }}>
+        {l?.escopo === "run" ? (
+          <>
+            Mostrando o <strong>run {l.run_ativo}</strong>, que esta ativo.
+          </>
+        ) : (
+          <>
+            Nenhum run ativo — mostrando o{" "}
+            <strong>livro inteiro</strong>, que soma os{" "}
+            {l?.runs_somados ?? 0} runs ja existentes.{" "}
+            <span className="warn">Nao e a carteira de um run.</span>
+          </>
+        )}
+      </p>
       <div className="duas">
         <Card titulo="Livro simulado (USD)">
           <table>
