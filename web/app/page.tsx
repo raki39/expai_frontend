@@ -95,6 +95,7 @@ type ConfigResposta = {
   version_id: number;
   config_hash: string;
   congelada: boolean;
+  catalogo_desatualizado?: string[];
   config: {
     market_venue: string;
     market_symbol: string;
@@ -318,6 +319,20 @@ async function rodarAgente() {
   });
   revalidatePath("/");
   paraPainel(status, corpo, "agente");
+}
+
+async function adotarCatalogo(formData: FormData) {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/config/catalogo", {
+    method: "POST",
+    body: JSON.stringify({
+      author: String(formData.get("author") ?? "").trim(),
+      note: "adocao do catalogo de provedores verificado",
+    }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "config");
 }
 
 async function gravarSentinela(formData: FormData) {
@@ -1163,6 +1178,30 @@ export default async function Painel({
           <form action={reancorarConfig} className="linha" style={{ marginTop: 12 }}>
             <input name="author" placeholder="autor" required style={{ flex: 1 }} />
             <Botao pendente="reancorando…">Reancorar configuracao</Botao>
+          </form>
+        </div>
+      ) : null}
+
+      {c?.catalogo_desatualizado?.length ? (
+        <div className="card aviso warn" style={{ marginBottom: 14 }}>
+          <div>
+            <p style={{ marginTop: 0, marginBottom: 6 }}>
+              <strong>Catalogo de provedores desatualizado no banco:</strong>{" "}
+              <code>{c.catalogo_desatualizado.join(", ")}</code>
+            </p>
+            <p className="sub" style={{ marginBottom: 0, fontSize: 12 }}>
+              O banco e a autoridade sobre o experimento — isto nao e "o banco
+              esta errado", e a constatacao de que ele discorda do catalogo
+              verificado no codigo. Adotar toca <strong>apenas</strong> tiers,
+              tabela de precos e a versao dela, e cria uma versao nova com
+              autor, data, valor anterior e novo. <strong>E material:</strong>{" "}
+              preco alimenta o teto de gasto, e o teto decide quantas reflexoes
+              cabem num run — entao invalida comparacao com runs anteriores.
+            </p>
+          </div>
+          <form action={adotarCatalogo} className="linha" style={{ marginTop: 12 }}>
+            <input name="author" placeholder="autor" required style={{ flex: 1 }} />
+            <Botao pendente="adotando…">Adotar catalogo verificado</Botao>
           </form>
         </div>
       ) : null}
