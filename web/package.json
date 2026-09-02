@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "conferir-escopo": "node scripts/conferir-escopo.mjs"
+    "conferir-escopo": "node scripts/conferir-escopo.mjs",
+    "conferir-blocos": "node scripts/conferir-blocos.mjs",
+    "conferir": "npm run conferir-blocos && npm run conferir-escopo && npm run typecheck"
   },
   "dependencies": {
     "next": "16.3.4",

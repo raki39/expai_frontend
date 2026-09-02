@@ -3,13 +3,15 @@
  *
  * As secoes sao agrupadas pela PERGUNTA que respondem, e nao pela numeracao
  * do `05-painel.md` secao 6. Os nove blocos continuam todos presentes - o
- * criterio 1 do incremento 6 exige isso e ha teste conferindo - mas
- * empilhados na ordem do documento a tela obrigava a saltar entre assuntos
- * para montar uma ideia so.
+ * criterio 1 do incremento 6 exige isso - mas empilhados na ordem do
+ * documento a tela obrigava a saltar entre assuntos para montar uma ideia so.
  *
- * O mapa entre os dois esta em `BLOCOS`, logo abaixo: sem ele a conferencia
- * item a item viraria uma leitura de tela, que e a forma de garantia que
- * este projeto ja viu falhar quatro vezes.
+ * O mapa entre os dois esta em `BLOCOS`, logo abaixo, e quem o confere e
+ * `npm run conferir-blocos`: os nove presentes, cada um apontando para uma
+ * secao que existe, e cada secao de fato renderizada em `page.tsx`.
+ *
+ * Este comentario ja afirmou que havia teste conferindo quando nao havia, e
+ * `BLOCOS` ficou declarado sem nunca ser lido. Foi assim que o script nasceu.
  *
  * Nenhuma regra de negocio aqui (secao 10.2.1). Isto e forma.
  */
