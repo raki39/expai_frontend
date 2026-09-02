@@ -97,6 +97,8 @@ type Transacoes = {
 
 type Simulador = {
   run_ativo: number | null;
+  run_exibido?: number | null;
+  encerrado?: boolean;
   execucoes?: number;
   posicao_sats?: number;
   custos_cents?: {
@@ -649,7 +651,12 @@ export default async function Painel({
             <tbody>
               <tr>
                 <td>execucoes</td>
-                <td className="num">{sim.execucoes ?? 0}</td>
+                <td className="num">
+                  {(sim.execucoes ?? 0).toLocaleString("pt-BR")}
+                  {sim.encerrado && sim.run_exibido ? (
+                    <span className="sub"> · run {sim.run_exibido} (encerrado)</span>
+                  ) : null}
+                </td>
               </tr>
               <tr>
                 <td>posicao</td>
