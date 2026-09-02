@@ -94,10 +94,56 @@ type Transacoes = {
   }[];
 };
 
+type Simulador = {
+  run_ativo: number | null;
+  execucoes?: number;
+  posicao_sats?: number;
+  custos_cents?: {
+    taxa: number;
+    spread: number;
+    slippage: number;
+    penalidade: number;
+    total: number;
+  };
+  fidelity_level?: number | null;
+  fidelidade_homogenea?: boolean;
+  condicoes_validade: string;
+};
+
+type Execucoes = {
+  items: {
+    id: number;
+    side: string;
+    decision_bar_ms: number;
+    execution_bar_ms: number;
+    quantity_sats: number;
+    price_ref: number;
+    price_exec: number;
+    fee_cents: number;
+    spread_cents: number;
+    slippage_cents: number;
+    penalty_cents: number;
+    fidelity_level: number;
+  }[];
+};
+
 type Sentinelas = {
   total: number;
   items: { id: number; label: string; created_at: string }[];
 };
+
+/** Preco vem com 8 casas decimais, como inteiro. A divisao acontece so aqui. */
+function preco(escalado: number): string {
+  return (escalado / 1e8).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+}
+
+function btc(sats: number): string {
+  return (sats / 1e8).toLocaleString("pt-BR", { maximumFractionDigits: 8 });
+}
 
 /* ----------------------------------------------------------------- acoes */
 
@@ -195,7 +241,7 @@ export default async function Painel({
   if (!(await temSessao())) redirect("/login");
 
   const p = await searchParams;
-  const [health, dataset, config, ledger, transacoes, sentinelas] =
+  const [health, dataset, config, ledger, transacoes, sentinelas, simulador, execucoes] =
     await Promise.all([
       chamarApi("/api/health"),
       chamarApi("/api/dataset"),
@@ -203,6 +249,8 @@ export default async function Painel({
       chamarApi("/api/ledger"),
       chamarApi("/api/ledger/transacoes?limite=12"),
       chamarApi("/api/sentinel"),
+      chamarApi("/api/simulador"),
+      chamarApi("/api/execucoes?limite=10"),
     ]);
 
   if (health.status !== 200) {
@@ -235,6 +283,8 @@ export default async function Painel({
   const l = ledger.status === 200 ? (ledger.corpo as Ledger) : null;
   const tx = (transacoes.corpo as Transacoes)?.items ?? [];
   const s = sentinelas.corpo as Sentinelas;
+  const sim = simulador.corpo as Simulador;
+  const exec = (execucoes.corpo as Execucoes)?.items ?? [];
   const cfg = c?.config ?? null;
 
   const tudoConfere =
@@ -442,6 +492,115 @@ export default async function Painel({
           </p>
         )}
       </div>
+
+      {/* ====================================================== simulador */}
+      <h2>Simulador</h2>
+      <div className="duas">
+        <Card titulo="Custos, decompostos">
+          {/* Um campo "custo" agregado nao passaria no criterio 3: sem
+              separar, e impossivel saber depois o que comeu o resultado. */}
+          <table>
+            <tbody>
+              <tr>
+                <td>taxa (taker)</td>
+                <td className="num"><Dinheiro minor={sim.custos_cents?.taxa} moeda="USD" /></td>
+              </tr>
+              <tr>
+                <td>spread</td>
+                <td className="num"><Dinheiro minor={sim.custos_cents?.spread} moeda="USD" /></td>
+              </tr>
+              <tr>
+                <td>slippage</td>
+                <td className="num"><Dinheiro minor={sim.custos_cents?.slippage} moeda="USD" /></td>
+              </tr>
+              <tr>
+                <td>penalidade</td>
+                <td className="num"><Dinheiro minor={sim.custos_cents?.penalidade} moeda="USD" /></td>
+              </tr>
+              <tr className="total">
+                <td>total</td>
+                <td className="num"><Dinheiro minor={sim.custos_cents?.total} moeda="USD" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </Card>
+
+        <Card titulo="Estado da simulacao">
+          <table>
+            <tbody>
+              <tr>
+                <td>execucoes</td>
+                <td className="num">{sim.execucoes ?? 0}</td>
+              </tr>
+              <tr>
+                <td>posicao</td>
+                <td className="num">
+                  {sim.posicao_sats ? `${btc(sim.posicao_sats)} BTC` : "zerada"}
+                </td>
+              </tr>
+              <tr>
+                <td>fidelidade declarada</td>
+                <td>
+                  {/* Criterio 5: o nivel viaja junto do numero, e aparece
+                      na tela. Numero de custo sem a fidelidade que o produziu
+                      convida a conclusao que a 0A nao sustenta. */}
+                  {sim.fidelidade_homogenea === false ? (
+                    <span className="pill bad">MISTA — nao declarar</span>
+                  ) : sim.fidelity_level ? (
+                    <span className="pill neutro">nivel {sim.fidelity_level}</span>
+                  ) : d.fidelity_level ? (
+                    <span className="pill neutro">
+                      nivel {d.fidelity_level} <span className="sub">(do dataset)</span>
+                    </span>
+                  ) : (
+                    <span className="pill neutro">—</span>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="aviso warn" style={{ marginTop: 12 }}>
+            <p style={{ marginBottom: 0, fontSize: 12 }}>{sim.condicoes_validade}</p>
+          </div>
+        </Card>
+      </div>
+
+      {exec.length ? (
+        <div className="card" style={{ marginTop: 14 }}>
+          <h3>Execucoes recentes</h3>
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <tbody>
+                <tr>
+                  <td className="sub">lado</td>
+                  <td className="sub">decisao</td>
+                  <td className="sub">execucao</td>
+                  <td className="sub">quantidade</td>
+                  <td className="sub">referencia</td>
+                  <td className="sub">executado</td>
+                  <td className="sub">fid.</td>
+                </tr>
+                {exec.map((e) => (
+                  <tr key={e.id}>
+                    <td style={{ width: "auto" }}>
+                      <span className={`pill ${e.side === "compra" ? "ok" : "warn"}`}>
+                        {e.side}
+                      </span>
+                    </td>
+                    <td className="sub"><Utc ms={e.decision_bar_ms} /></td>
+                    <td className="sub"><Utc ms={e.execution_bar_ms} /></td>
+                    <td className="num">{btc(e.quantity_sats)}</td>
+                    <td className="num sub">{preco(e.price_ref)}</td>
+                    {/* Executado sempre pior que a referencia. Nunca melhor. */}
+                    <td className="num bad">{preco(e.price_exec)}</td>
+                    <td className="num">{e.fidelity_level}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {/* ======================================================== dataset */}
       <h2>Dataset</h2>
