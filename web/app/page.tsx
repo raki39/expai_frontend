@@ -1247,9 +1247,27 @@ export default async function Painel({
                     <strong>{faixa.alerta}</strong>
                   </>
                 ) : null}{" "}
-                <strong>Isto e leitura, nao conclusao</strong> — e o resultado e
-                em amostra, porque o cerebro observou a mesma janela em que
-                operou.
+                <strong>Isto e leitura, nao conclusao</strong>
+                {/* A frase SEGUE o numero, e nao o contrario.
+                    Ela dizia sempre "o resultado e em amostra, porque o
+                    cerebro observou a mesma janela em que operou" - texto da
+                    0A, verdadeiro sob a D22. A D34 separou as janelas e a
+                    sobreposicao caiu para zero; a frase continuou afirmando o
+                    oposto do campo ao lado dela. */}
+                {(ag.sobreposicao_amostral?.sobreposicao_bps ?? 0) > 0 ? (
+                  <>
+                    {" "}
+                    — e o resultado e <strong>em amostra</strong>, porque o
+                    cerebro observou a mesma janela em que operou.
+                  </>
+                ) : (
+                  <>
+                    . O cerebro observou <code>exploracao</code> e as maos
+                    executaram <code>in_sample</code> (D34): a sobreposicao
+                    amostral e zero, o que remove uma objecao e nao substitui
+                    o veredito do validador.
+                  </>
+                )}
               </p>
             </div>
           ) : null}
@@ -1645,7 +1663,7 @@ export default async function Painel({
           </Tile>
           <Tile
             rotulo="Sobreposicao com a janela executada"
-            contexto="100% significa resultado inteiramente em amostra (D22)"
+            contexto="zero e o desenho da 0B: o cerebro observa exploracao e as maos executam in_sample (D34, que revisa a D22)"
           >
             {ag.sobreposicao_amostral?.sobreposicao_bps != null
               ? `${(ag.sobreposicao_amostral.sobreposicao_bps / 100).toFixed(0)}%`
@@ -1790,11 +1808,18 @@ export default async function Painel({
                     ? `${(ag.sobreposicao_amostral.sobreposicao_bps / 100).toFixed(0)}%`
                     : "—"}
                 </strong>
-                . Na Fase 0A o cerebro observa a mesma janela em que a regra
-                roda, entao o resultado e <strong>em amostra</strong>:
-                suficiente para responder "o ciclo fecha?", insuficiente para
-                qualquer afirmacao de desempenho. Arredondamento do custo
-                conferido: <Pill ok={ag.arredondamento_do_custo_ok} />
+                .{" "}
+                {(ag.sobreposicao_amostral?.sobreposicao_bps ?? 0) > 0
+                  ? `Na 0A o cerebro observava a mesma janela em que a regra
+                     roda, entao o resultado e em amostra: suficiente para
+                     responder "o ciclo fecha?", insuficiente para qualquer
+                     afirmacao de desempenho.`
+                  : `Na 0B o cerebro observa exploracao e as maos executam
+                     in_sample (D34, secao 8.5.1), entao o resultado nao e em
+                     amostra. Isso remove uma objecao — nao promove nada: quem
+                     conclui e o validador, na secao 03.`}{" "}
+                Arredondamento do custo conferido:{" "}
+                <Pill ok={ag.arredondamento_do_custo_ok} />
               </p>
               <details>
                 <summary>condicoes de validade deste run</summary>
