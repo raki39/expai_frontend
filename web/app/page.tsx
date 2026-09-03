@@ -130,6 +130,15 @@ type Agente = {
    *  api: classificar e decidir, e decidir sobre o experimento nao
    *  acontece no painel (regra 19). */
   faixa?: string;
+  /** O controle casa o giro deste run? Vem da api: nao ha ligacao entre o
+   *  run do B1 e o run que ele casa, e a tela ja mostrou 37 idas e voltas
+   *  ao lado de um controle de 70 (D19). */
+  b1_casado_confere?: {
+    casa: boolean;
+    operacoes_alvo: number | null;
+    idas_e_voltas_do_run: number;
+    por_que_importa: string;
+  } | null;
   /** O pre-registro estruturado. Vem montado da api: parsear o
    *  `raw_response_json` aqui seria logica de negocio (regra 19). */
   pre_registro?: PreRegistro | null;
@@ -973,6 +982,27 @@ export default async function Painel({
                 )}
               </p>
             ) : null}
+          </div>
+        ) : null}
+
+        {/* O CONTROLE CASA O GIRO DESTE RUN?
+            A D19 existe para impedir comparar giros diferentes: cada ida e
+            volta paga um pedagio fixo, entao quem opera menos ganha do B1 sem
+            acertar nada. Quando o controle nao casa, a tabela inteira abaixo
+            compara coisas diferentes - e ela parece plausivel do mesmo jeito.
+
+            Aconteceu: a tela mostrou 37 idas e voltas do run ao lado de um
+            controle de 70, porque o run exibido era outro. */}
+        {ag.b1_casado_confere && !ag.b1_casado_confere.casa ? (
+          <div className="aviso bad" style={{ marginTop: 0 }}>
+            <p style={{ marginBottom: 0 }}>
+              <strong>O controle nao casa o giro deste run.</strong> O run fez{" "}
+              {ag.b1_casado_confere.idas_e_voltas_do_run} idas e voltas e o B1
+              exibido foi casado com{" "}
+              {ag.b1_casado_confere.operacoes_alvo ?? "?"}. Toda comparacao
+              abaixo mede giro, e nao escolha de momento —{" "}
+              {ag.b1_casado_confere.por_que_importa}
+            </p>
           </div>
         ) : null}
 
