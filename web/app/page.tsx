@@ -130,10 +130,119 @@ type Agente = {
    *  api: classificar e decidir, e decidir sobre o experimento nao
    *  acontece no painel (regra 19). */
   faixa?: string;
+  /** O pre-registro estruturado. Vem montado da api: parsear o
+   *  `raw_response_json` aqui seria logica de negocio (regra 19). */
+  pre_registro?: PreRegistro | null;
+  /** O parecer INDEPENDENTE do validador (§8.1), ao lado da autoavaliacao
+   *  do agente. Vinha so no corpo do POST do ciclo. */
+  parecer_do_validador?: Parecer | null;
+  hypothesis_id?: number | null;
   sobreposicao_amostral?: { sobreposicao_bps: number | null };
   condicoes_validade?: string;
   cache_de_respostas?: number;
   arredondamento_do_custo_ok?: boolean;
+};
+
+/** O pre-registro de §8.2. Imutavel a partir da gravacao. */
+type PreRegistro = {
+  id: number;
+  enunciado: string;
+  metrica_primaria: string;
+  efeito_minimo: number;
+  n_minimo: number;
+  sharpe_esperado_milesimos: number;
+  criterio_parada: string;
+  condicoes_falseamento: {
+    metrica: string;
+    comparador: string;
+    valor: number;
+  }[];
+  testavel: boolean;
+  motivo_nao_testavel: string | null;
+  horizonte_barras: number;
+  content_hash: string;
+};
+
+/** O parecer do validador, recalculado do banco a cada leitura. */
+type Parecer = {
+  veredito: string | null;
+  motivo: string | null;
+  recalculado?: boolean;
+  detalhe?: {
+    amostra?: {
+      n_bruto: number;
+      n_efetivo: number;
+      n_minimo: number;
+      suficiente: boolean;
+    };
+    efeito?: { minimo_declarado: number; observado: number | null; alcancou: boolean };
+    condicoes_falseamento?: {
+      condicao: string;
+      observado: number | null;
+      disparou: boolean | null;
+      por_que_nao_conferida: string | null;
+    }[];
+  };
+};
+
+type Separacao = {
+  existe: boolean;
+  dividido?: boolean;
+  conjuntos?: {
+    finalidade: string;
+    barras: number;
+    acesso: string;
+  }[];
+  acessivel_ao_agente?: string[];
+  sem_vazamento?: {
+    conferido: boolean;
+    janelas: number;
+    purga_barras: number;
+    embargo_barras: number;
+    purga_origem: string;
+    problemas: string[];
+  };
+  holdout?: { usos: unknown[]; regra: string };
+};
+
+type Lote = {
+  parametros?: {
+    familia_max_hipoteses: number;
+    fdr_procedimento: string;
+    fdr_alvo_bps: number;
+    dsr_minimo_milesimos: number;
+  };
+  fechamento?: {
+    familia_max: number;
+    testadas: number;
+    sem_p_valor: number;
+    tentativas_globais: number;
+    sobreviventes: number[];
+    fdr: {
+      procedimento: string;
+      m: number;
+      correcao_harmonica_milesimos: number;
+      limiar_efetivo_ppm: number;
+      k: number;
+    };
+    membros: {
+      hypothesis_id: number;
+      estado: string;
+      p_valor_ppm: number | null;
+      por_que_sem_p: string | null;
+    }[];
+  };
+};
+
+type Creditos = {
+  por_braco?: {
+    braco: string;
+    orcamento: number;
+    consumido: number;
+    restante: number;
+  }[];
+  por_tipo?: { tipo: string; testes: number; creditos: number }[];
+  pesos_do_documento?: Record<string, number>;
 };
 
 type ConfigResposta = {
@@ -511,6 +620,7 @@ export default async function Painel({
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
+    separacao, lote, creditos,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -524,6 +634,9 @@ export default async function Painel({
     chamarApi("/api/agente"),
     chamarApi("/api/baselines/curva"),
     chamarApi("/api/relatorio"),
+    chamarApi("/api/dataset/separacao"),
+    chamarApi("/api/validador/lote"),
+    chamarApi("/api/validador/creditos"),
   ]);
 
   if (health.status !== 200) {
@@ -565,6 +678,11 @@ export default async function Painel({
   const cv = curva.corpo as DadosDaCurva;
   const rel = relatorio.status === 200 ? (relatorio.corpo as Relatorio) : null;
   const cfg = c?.config ?? null;
+  const sep = separacao.status === 200 ? (separacao.corpo as Separacao) : null;
+  const lt = lote.status === 200 ? (lote.corpo as Lote) : null;
+  const cr = creditos.status === 200 ? (creditos.corpo as Creditos) : null;
+  const pre = ag.pre_registro ?? null;
+  const par = ag.parecer_do_validador ?? null;
 
     const faixa = ag.faixa ? FAIXA[ag.faixa] : undefined;
   const comparacaoVelha = cmp.existe && cmp.sob_a_config_vigente === false;
@@ -1043,7 +1161,291 @@ export default async function Painel({
         </div>
       </Secao>
 
-      {/* =================================================== 03 · DECISAO */}
+      {/* ============================================== 03 · CONHECIMENTO */}
+      <Secao id="conhecimento">
+        {/* A pergunta da 0B, e ela nao e a da secao 02.
+            §14.4: "a Fase 0 e primariamente um teste do VALIDADOR, e
+            secundariamente um teste do agente". Ganhar do acaso num run e
+            resultado; o protocolo aceitar a hipotese e outra coisa - e as
+            duas podem discordar, como discordam aqui.
+
+            Esta secao nao existia. Conferir a 0B exigia exportar o JSON e ler
+            a mao, o que aconteceu nos tres primeiros runs da fase. */}
+        {!pre ? (
+          <div className="aviso warn" style={{ marginTop: 0 }}>
+            <p style={{ marginBottom: 0 }}>
+              <strong>Nenhuma hipotese pre-registrada neste run.</strong> Sem
+              proposta aceita nao ha hipotese, e sem hipotese o validador nao
+              tem sobre o que opinar. Veja a secao 02 para saber por que.
+            </p>
+          </div>
+        ) : (
+          <>
+            <Tiles>
+              <Tile
+                rotulo="Veredito do validador"
+                heroi
+                destaque
+                contexto="independente do agente (§8.1) — e 'inconclusivo' nunca vira sucesso (§14.4)"
+              >
+                <span
+                  className={
+                    par?.veredito === "sustentada"
+                      ? "good"
+                      : par?.veredito === "refutada"
+                        ? "bad"
+                        : "warn"
+                  }
+                >
+                  {par?.veredito ?? "—"}
+                </span>
+              </Tile>
+              <Tile
+                rotulo="Amostra"
+                contexto={
+                  par?.detalhe?.amostra
+                    ? `n_minimo declarado: ${par.detalhe.amostra.n_minimo.toLocaleString("pt-BR")}`
+                    : "sem amostra medida"
+                }
+              >
+                <span
+                  className={par?.detalhe?.amostra?.suficiente ? "good" : "warn"}
+                >
+                  {par?.detalhe?.amostra
+                    ? par.detalhe.amostra.n_efetivo.toLocaleString("pt-BR")
+                    : "—"}
+                </span>
+              </Tile>
+              <Tile
+                rotulo="Efeito minimo"
+                contexto="declarado ANTES de executar, e imutavel (§8.2)"
+              >
+                <Dinheiro minor={pre.efeito_minimo} moeda="USD" />
+              </Tile>
+              <Tile
+                rotulo="Testavel no horizonte"
+                contexto={
+                  pre.testavel
+                    ? `${pre.horizonte_barras.toLocaleString("pt-BR")} barras de execucao`
+                    : (pre.motivo_nao_testavel ?? "nao testavel")
+                }
+              >
+                <span className={pre.testavel ? "good" : "bad"}>
+                  {pre.testavel ? "sim" : "nao"}
+                </span>
+              </Tile>
+            </Tiles>
+
+            <div className="card">
+              <p className="sub" style={{ marginTop: 0, fontSize: 12.5 }}>
+                <strong>Pre-registro #{pre.id}</strong> ·{" "}
+                <code>{quebravel(pre.metrica_primaria)}</code> ·{" "}
+                parada por <code>{quebravel(pre.criterio_parada)}</code> ·{" "}
+                Sharpe declarado{" "}
+                {(pre.sharpe_esperado_milesimos / 1000).toFixed(2)} ·{" "}
+                <Hash valor={pre.content_hash} />
+              </p>
+              <p style={{ marginTop: 8, marginBottom: 0 }}>{pre.enunciado}</p>
+              {par?.motivo ? (
+                <p className="sub" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <strong>Parecer:</strong> {par.motivo}
+                </p>
+              ) : null}
+            </div>
+
+            {/* As condicoes de falseamento, com o que foi observado. Sao elas
+                que tornam o veredito uma conta em vez de uma leitura: na 0A a
+                expectativa era prosa e a avaliacao saia `None`. */}
+            <div className="tabela">
+              <table>
+                <caption>
+                  Condicoes de falseamento — o que refutaria esta hipotese
+                </caption>
+                <thead>
+                  <tr>
+                    <th>condicao</th>
+                    <th className="num">observado</th>
+                    <th>disparou?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(par?.detalhe?.condicoes_falseamento ?? []).map((cl, i) => (
+                    <tr key={i}>
+                      <td>
+                        <code>{quebravel(cl.condicao)}</code>
+                      </td>
+                      <td className="num">
+                        {cl.observado != null
+                          ? cl.observado.toLocaleString("pt-BR")
+                          : "—"}
+                      </td>
+                      <td>
+                        {cl.disparou == null ? (
+                          <span className="sub">
+                            {cl.por_que_nao_conferida ?? "nao conferida"}
+                          </span>
+                        ) : (
+                          // `disparou: true` significa que a hipotese foi
+                          // CONTRARIADA - vermelho. O componente `Pill`
+                          // pinta `ok=true` de verde, e inverter o booleano
+                          // para caber nele deixaria a leitura ao contrario
+                          // aqui no codigo.
+                          <span
+                            className={`pill ${cl.disparou ? "bad" : "ok"}`}
+                          >
+                            {cl.disparou ? "sim" : "nao"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {!(par?.detalhe?.condicoes_falseamento ?? []).length ? (
+                    <tr>
+                      <td colSpan={3} className="sub">
+                        Sem clausulas conferidas — o pre-registro exige ao menos
+                        uma, imposta por CHECK no banco.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* O LOTE fechado. O limiar efetivo e o numero que decide promocao, e
+            ele nao e o alfa: BY divide o alfa por H(m). */}
+        {lt?.fechamento ? (
+          <Tiles>
+            <Tile
+              rotulo="Procedimento"
+              contexto={`H(${lt.fechamento.fdr.m}) = ${(
+                lt.fechamento.fdr.correcao_harmonica_milesimos / 1000
+              ).toFixed(4)} — escolhido antes da primeira hipotese (§8.6)`}
+            >
+              {lt.fechamento.fdr.procedimento}
+            </Tile>
+            <Tile
+              rotulo="Limiar efetivo"
+              contexto={`alvo de FDR ${(
+                (lt.parametros?.fdr_alvo_bps ?? 0) / 100
+              ).toFixed(0)}% dividido pela correcao`}
+            >
+              {(lt.fechamento.fdr.limiar_efetivo_ppm / 10000).toFixed(4)}%
+            </Tile>
+            <Tile
+              rotulo="Familia"
+              contexto={`teto de ${lt.fechamento.familia_max} fixado antes de comecar — a hipotese seguinte e RECUSADA, nunca truncada`}
+            >
+              {lt.fechamento.testadas} / {lt.fechamento.familia_max}
+            </Tile>
+            <Tile
+              rotulo="Sobreviventes"
+              contexto="passou em BY E no DSR — §8.6 pede as duas"
+            >
+              <span
+                className={lt.fechamento.sobreviventes.length ? "good" : "warn"}
+              >
+                {lt.fechamento.sobreviventes.length}
+              </span>
+            </Tile>
+            <Tile
+              rotulo="Tentativas no contador global"
+              contexto="alimenta o DSR e NUNCA e zerado: descartar tentativas fracassadas e o mecanismo que produz falsas descobertas (§8.6)"
+            >
+              {lt.fechamento.tentativas_globais}
+            </Tile>
+            {cr?.por_braco?.length ? (
+              <Tile
+                rotulo="Creditos de teste"
+                contexto={`orcamento de ${cr.por_braco[0].orcamento} por braco (D30), pesos 1/3/5/10 de §8.6.1`}
+              >
+                {cr.por_braco[0].consumido} usado
+                {cr.por_braco[0].consumido === 1 ? "" : "s"}
+              </Tile>
+            ) : null}
+          </Tiles>
+        ) : null}
+
+        {/* A SEPARACAO. O agente nao alcanca walk-forward nem holdout, e isso
+            e da estrutura da consulta - `acesso` entra como literal no SQL,
+            nunca como parametro (§8.5.1). */}
+        {sep?.dividido ? (
+          <div className="tabela">
+            <table>
+              <caption>
+                Separacao por finalidade — a fronteira e da estrutura, nao da
+                disciplina do agente (§8.5.1)
+              </caption>
+              <thead>
+                <tr>
+                  <th>conjunto</th>
+                  <th className="num">barras</th>
+                  <th>quem alcanca</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(sep.conjuntos ?? []).map((cj) => (
+                  <tr key={cj.finalidade}>
+                    <td>
+                      <code>{quebravel(cj.finalidade)}</code>
+                    </td>
+                    <td className="num">
+                      {cj.barras.toLocaleString("pt-BR")}
+                    </td>
+                    <td>
+                      <span
+                        className={`pill ${
+                          cj.acesso === "agente" ? "neutro" : "ok"
+                        }`}
+                      >
+                        {cj.acesso}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+              Vazamento conferido em {sep.sem_vazamento?.janelas ?? 0} janelas
+              de walk-forward · purga {sep.sem_vazamento?.purga_barras} barras (
+              {sep.sem_vazamento?.purga_origem}) · embargo{" "}
+              {sep.sem_vazamento?.embargo_barras} ·{" "}
+              {sep.sem_vazamento?.problemas.length ? (
+                <span className="bad">
+                  {sep.sem_vazamento.problemas.length} problema(s)
+                </span>
+              ) : (
+                <span className="good">nenhum problema</span>
+              )}{" "}
+              · holdout consumido por {sep.holdout?.usos.length ?? 0} hipotese(s),
+              uso unico imposto por UNIQUE no banco
+            </p>
+          </div>
+        ) : (
+          <div className="aviso bad">
+            <p style={{ marginBottom: 0 }}>
+              <strong>O dataset nao tem separacao por finalidade.</strong> Rodar
+              o agente e recusado: sem os quatro conjuntos de §8.5.1, a hipotese
+              nasceria olhando dados que deveriam estar selados. Use o botao de
+              ingestao na secao 01 para criar a divisao.
+            </p>
+          </div>
+        )}
+
+        <details>
+          <summary>json cru — validador, lote, creditos, separacao</summary>
+          <pre>
+            {JSON.stringify(
+              { pre_registro: pre, parecer: par, lote: lt, creditos: cr, separacao: sep },
+              null,
+              2,
+            )}
+          </pre>
+        </details>
+      </Secao>
+
+      {/* =================================================== 04 · DECISAO */}
       <Secao id="decisao">
         <Tiles>
           <Tile

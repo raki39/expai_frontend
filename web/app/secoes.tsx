@@ -31,21 +31,31 @@ export const BLOCOS: { bloco: string; secao: string }[] = [
   { bloco: "9 configuracao", secao: "#ajustes" },
 ];
 
-/** O que a secao 07 acrescenta, e que nao e bloco de §6 do 05-painel. */
+/** O que a tela acrescenta, e que nao e bloco de §6 do 05-painel. */
 export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
   { assunto: "relatorio de fechamento (incremento 7)", secao: "#fechamento" },
   { assunto: "sentinela de persistencia (incremento 0)", secao: "#substrato" },
+  // A 0B inteira. O plano dizia "nao ha tela nova ate haver o que mostrar", e
+  // agora ha: hipotese pre-registrada, veredito do validador, lote fechado com
+  // BY e creditos consumidos. Sem esta secao, conferir a fase exigia exportar
+  // JSON e ler a mao - foi o que aconteceu nos tres primeiros runs da 0B.
+  { assunto: "conhecimento: pre-registro, parecer, lote e creditos (0B)", secao: "#conhecimento" },
+  { assunto: "separacao por finalidade (incremento 9)", secao: "#conhecimento" },
 ];
 
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
   { id: "experimento", n: "01", titulo: "Executar", pergunta: "o que da para fazer agora?" },
   { id: "resultado", n: "02", titulo: "Resultado", pergunta: "o agente ganhou do acaso?" },
-  { id: "decisao", n: "03", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
-  { id: "execucao", n: "04", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
-  { id: "dinheiro", n: "05", titulo: "Dinheiro", pergunta: "as contas fecham?" },
-  { id: "ajustes", n: "06", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "fechamento", n: "07", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
-  { id: "substrato", n: "08", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  // A pergunta da 0B, e ela e diferente da 02. Ganhar do acaso num run e
+  // resultado; o protocolo aceitar a hipotese e outra coisa - e §14.4 diz que
+  // a fase e "primariamente um teste do validador".
+  { id: "conhecimento", n: "03", titulo: "Conhecimento", pergunta: "o protocolo aceita essa hipotese?" },
+  { id: "decisao", n: "04", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
+  { id: "execucao", n: "05", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
+  { id: "dinheiro", n: "06", titulo: "Dinheiro", pergunta: "as contas fecham?" },
+  { id: "ajustes", n: "07", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
+  { id: "fechamento", n: "08", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "09", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {
