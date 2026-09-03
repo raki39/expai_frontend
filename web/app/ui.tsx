@@ -184,6 +184,23 @@ function formatar(texto: string): string {
   try {
     return JSON.stringify(JSON.parse(texto), null, 2);
   } catch {
-    return texto;
+    // Nao e JSON, ou chegou TRUNCADO. A segunda hipotese e a comum: o corpo
+    // vai pela URL do redirect com um corte em 4.000 caracteres, e a resposta
+    // do B4 tem ~8.000 - o JSON chegava pela metade, indentar era impossivel,
+    // e a caixa mostrava um blob numa linha so.
+    //
+    // Aumentar o corte nao resolve: `encodeURIComponent` triplica JSON, e o
+    // header de um redirect nao aguenta. Quem resume e a API, no campo
+    // `mensagem`; aqui o que falta e dizer que o resto foi cortado, em vez de
+    // deixar quem le achar que a resposta era aquilo.
+    const truncado = !/[}\]]\s*$/.test(texto.trimEnd());
+    if (!truncado) return texto;
+    return (
+      texto +
+      "\n\n[cortado em " +
+      texto.length +
+      " caracteres para caber na URL. A resposta completa esta na secao do" +
+      " assunto e no export.]"
+    );
   }
 }
