@@ -221,7 +221,10 @@ type Lote = {
     fdr: {
       procedimento: string;
       m: number;
-      correcao_harmonica_milesimos: number;
+      /** Em ppm, e nao em milesimos: H(48) = 4,458797... e milesimos
+       *  truncam para 4458, que formatado com quatro casas vira `4,4580` -
+       *  um zero inventado onde o digito real e 8. */
+      correcao_harmonica_ppm: number;
       limiar_efetivo_ppm: number;
       k: number;
     };
@@ -1320,7 +1323,7 @@ export default async function Painel({
             <Tile
               rotulo="Procedimento"
               contexto={`H(${lt.fechamento.fdr.m}) = ${(
-                lt.fechamento.fdr.correcao_harmonica_milesimos / 1000
+                lt.fechamento.fdr.correcao_harmonica_ppm / 1_000_000
               ).toFixed(4)} — escolhido antes da primeira hipotese (§8.6)`}
             >
               {lt.fechamento.fdr.procedimento}
