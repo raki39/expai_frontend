@@ -248,6 +248,26 @@ type Creditos = {
   pesos_do_documento?: Record<string, number>;
 };
 
+/** O braco de controle nao cognitivo (§14.3). */
+type B4 = {
+  existe: boolean;
+  quantas?: number;
+  agente_origem?: string;
+  creditos?: {
+    braco: string;
+    orcamento: number;
+    consumido: number;
+    restante: number;
+  } | null;
+  hipoteses?: {
+    hypothesis_id: number;
+    run_id: number;
+    testavel: number | boolean;
+    content_hash: string;
+    rule_id: number | null;
+  }[];
+};
+
 type ConfigResposta = {
   version_id: number;
   config_hash: string;
@@ -565,6 +585,17 @@ async function rodarAgente() {
   paraPainel(status, corpo, "agente");
 }
 
+async function rodarB4() {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/b4", {
+    method: "POST",
+    body: JSON.stringify({ author: "painel" }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "b4");
+}
+
 async function provarReprodutibilidade() {
   "use server";
   if (!(await temSessao())) redirect("/login");
@@ -614,6 +645,7 @@ export default async function Painel({
     run?: string;
     comparacao?: string;
     agente?: string;
+    b4?: string;
     detalhe?: string;
   }>;
 }) {
@@ -623,7 +655,7 @@ export default async function Painel({
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
-    separacao, lote, creditos,
+    separacao, lote, creditos, b4,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -640,6 +672,7 @@ export default async function Painel({
     chamarApi("/api/dataset/separacao"),
     chamarApi("/api/validador/lote"),
     chamarApi("/api/validador/creditos"),
+    chamarApi("/api/b4"),
   ]);
 
   if (health.status !== 200) {
@@ -684,6 +717,7 @@ export default async function Painel({
   const sep = separacao.status === 200 ? (separacao.corpo as Separacao) : null;
   const lt = lote.status === 200 ? (lote.corpo as Lote) : null;
   const cr = creditos.status === 200 ? (creditos.corpo as Creditos) : null;
+  const b = b4.status === 200 ? (b4.corpo as B4) : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
 
@@ -850,6 +884,34 @@ export default async function Painel({
                 </span>
               </form>
               <Resultado status={p.agente} detalhe={p.detalhe} />
+            </div>
+          </Card>
+
+          <Card titulo="4 · B4 (controle)">
+            <p className="sub" style={{ margin: "0 0 8px", fontSize: 12.5 }}>
+              Busca aleatoria e varredura de parametro sobre o mesmo catalogo,
+              pelo <strong>mesmo validador</strong> e com o{" "}
+              <strong>mesmo orcamento</strong>. Sem ele, aprovar nao distingue
+              &quot;a reflexao gera hipoteses melhores&quot; de &quot;o LLM e
+              um custo decorativo&quot; (§14.3).
+            </p>
+            <p style={{ margin: 0 }}>
+              {b?.quantas ? (
+                <span className="pill ok">{b.quantas} hipoteses</span>
+              ) : (
+                <span className="pill warn">nunca rodou</span>
+              )}
+            </p>
+            <div className="acoes">
+              <form action={rodarB4} className="linha">
+                <Botao pendente="buscando e executando…">
+                  {b?.quantas ? "Rodar de novo" : "Rodar o B4"}
+                </Botao>
+                <span className="sub" style={{ fontSize: 12 }}>
+                  nao gasta dinheiro — so CPU
+                </span>
+              </form>
+              <Resultado status={p.b4} detalhe={p.detalhe} />
             </div>
           </Card>
         </div>
@@ -1370,6 +1432,67 @@ export default async function Painel({
           </Tiles>
         ) : null}
 
+        {/* OS DOIS BRACOS, por credito gasto.
+            §14.3, R44: "mede se a reflexao produz hipoteses melhores POR
+            CREDITO GASTO". Por hipotese nao serve - o agente gasta uma
+            reflexao paga por hipotese e B4 gasta CPU, e o que a fase compara e
+            o que cada credito comprou.
+
+            §14.3 tambem diz o que fazer se empatarem, e vale estar escrito na
+            tela: "se B4 empatar com o agente, isso nao mata o projeto -
+            significa que o valor esta na infraestrutura de validacao, e a
+            conclusao correta e remover o LLM do laco de geracao". */}
+        {cr?.por_braco?.length ? (
+          <div className="tabela">
+            <table>
+              <caption>
+                Os dois bracos, por credito gasto — a comparacao que a fase
+                existe para fazer (§14.3)
+              </caption>
+              <thead>
+                <tr>
+                  <th>braco</th>
+                  <th className="num">hipoteses</th>
+                  <th className="num">creditos</th>
+                  <th className="num">restante</th>
+                  <th>reflexoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cr.por_braco.map((br) => (
+                  <tr key={br.braco}>
+                    <td>
+                      <strong>{br.braco === "b4" ? "B4" : "agente"}</strong>
+                      <span className="sub">
+                        {br.braco === "b4"
+                          ? " busca aleatoria e varredura"
+                          : " reflexao com modelo"}
+                      </span>
+                    </td>
+                    <td className="num">
+                      {br.braco === "b4" ? (b?.quantas ?? 0) : "—"}
+                    </td>
+                    <td className="num">{br.consumido}</td>
+                    <td className="num sub">{br.restante}</td>
+                    <td>
+                      {br.braco === "b4" ? (
+                        <span className="pill ok">zero</span>
+                      ) : (
+                        <span className="sub">{ag.reflexoes ?? 0}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+              Sobreviventes por credito e o numero do Portao A (§14.4, criterio
+              &quot;supera B4 por credito consumido&quot;), e ele exige que os
+              dois bracos tenham rodado sob a mesma <code>config_version</code>.
+            </p>
+          </div>
+        ) : null}
+
         {/* A SEPARACAO. O agente nao alcanca walk-forward nem holdout, e isso
             e da estrutura da consulta - `acesso` entra como literal no SQL,
             nunca como parametro (§8.5.1). */}
@@ -1437,10 +1560,17 @@ export default async function Painel({
         )}
 
         <details>
-          <summary>json cru — validador, lote, creditos, separacao</summary>
+          <summary>json cru — validador, lote, creditos, separacao, b4</summary>
           <pre>
             {JSON.stringify(
-              { pre_registro: pre, parecer: par, lote: lt, creditos: cr, separacao: sep },
+              {
+                pre_registro: pre,
+                parecer: par,
+                lote: lt,
+                creditos: cr,
+                separacao: sep,
+                b4: b,
+              },
               null,
               2,
             )}
