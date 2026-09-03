@@ -209,7 +209,20 @@ h2 .nota {
   min-width: 0;
 }
 
+/* Espaco entre os BLOCOS de uma secao.
+ *
+ * `.card + .card` so casa quando os DOIS irmaos sao cards. Uma grade
+ * (`.duas`, `.tres`, `.grade`) seguida de um card, ou um aviso seguido de
+ * uma grade, nao casavam com regra nenhuma - e ficavam colados, sem um
+ * pixel entre eles. Da secao 05 em diante, que e onde esses arranjos
+ * aparecem, praticamente tudo estava grudado.
+ *
+ * A regra e sobre IRMAOS diretos da secao, entao vale para qualquer
+ * combinacao - inclusive as que ainda nao existem. */
+section > * + * { margin-top: 14px; }
+
 .card + .card { margin-top: 14px; }
+/* Dentro de uma grade quem separa e o `gap`, nunca a margem. */
 .grade .card + .card, .duas .card + .card, .tres .card + .card { margin-top: 0; }
 
 .card h3 {
