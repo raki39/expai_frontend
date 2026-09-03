@@ -119,6 +119,9 @@ type Agente = {
   reflexoes?: number;
   b1_casado?: {
     run_id: number;
+    /** O run que este controle casa (migracao 14). `null` nos controles
+     *  gravados antes dela. */
+    casa_run_id?: number | null;
     repeticoes: number;
     operacoes_alvo: number;
     fracao_bps?: number | null;
@@ -130,11 +133,17 @@ type Agente = {
    *  api: classificar e decidir, e decidir sobre o experimento nao
    *  acontece no painel (regra 19). */
   faixa?: string;
-  /** O controle casa o giro deste run? Vem da api: nao ha ligacao entre o
-   *  run do B1 e o run que ele casa, e a tela ja mostrou 37 idas e voltas
-   *  ao lado de um controle de 70 (D19). */
+  /** Duas perguntas, e o `ligado` diz qual esta sendo respondida.
+   *
+   *  `ligado: false` -> este run nao tem controle (todo run anterior a
+   *  migracao 14). `ligado: true, casa: false` -> tem controle e ele nao
+   *  casa o giro, o que agora e DEFEITO e nao ambiguidade.
+   *
+   *  Antes da ligacao a tela mostrou 37 idas e voltas ao lado de um controle
+   *  de 70, porque o B1 vinha de outro run (D19). */
   b1_casado_confere?: {
-    casa: boolean;
+    ligado: boolean;
+    casa: boolean | null;
     operacoes_alvo: number | null;
     idas_e_voltas_do_run: number;
     por_que_importa: string;
@@ -993,15 +1002,29 @@ export default async function Painel({
 
             Aconteceu: a tela mostrou 37 idas e voltas do run ao lado de um
             controle de 70, porque o run exibido era outro. */}
-        {ag.b1_casado_confere && !ag.b1_casado_confere.casa ? (
+        {ag.b1_casado_confere && !ag.b1_casado_confere.ligado ? (
+          <div className="aviso" style={{ marginTop: 0 }}>
+            <p style={{ marginBottom: 0 }}>
+              <strong>Este run nao tem controle ligado.</strong> A ligacao
+              entre o B1 casado e o run que ele casa existe desde a migracao
+              14; runs anteriores a ela nao tem nenhuma, e nao ha comparacao
+              com o acaso a fazer aqui —{" "}
+              {ag.b1_casado_confere.por_que_importa}
+            </p>
+          </div>
+        ) : null}
+
+        {ag.b1_casado_confere &&
+        ag.b1_casado_confere.ligado &&
+        ag.b1_casado_confere.casa === false ? (
           <div className="aviso bad" style={{ marginTop: 0 }}>
             <p style={{ marginBottom: 0 }}>
-              <strong>O controle nao casa o giro deste run.</strong> O run fez{" "}
-              {ag.b1_casado_confere.idas_e_voltas_do_run} idas e voltas e o B1
-              exibido foi casado com{" "}
-              {ag.b1_casado_confere.operacoes_alvo ?? "?"}. Toda comparacao
-              abaixo mede giro, e nao escolha de momento —{" "}
-              {ag.b1_casado_confere.por_que_importa}
+              <strong>O controle ligado nao casa o giro deste run.</strong> O
+              run fez {ag.b1_casado_confere.idas_e_voltas_do_run} idas e voltas
+              e o controle foi casado com{" "}
+              {ag.b1_casado_confere.operacoes_alvo ?? "?"}. Com a ligacao isto
+              e defeito, e nao ambiguidade: toda comparacao abaixo mede giro, e
+              nao escolha de momento — {ag.b1_casado_confere.por_que_importa}
             </p>
           </div>
         ) : null}
