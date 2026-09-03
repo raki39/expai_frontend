@@ -341,7 +341,7 @@ function paraPainel(status: number, corpo: unknown, campo: string): never {
 async function ingerirDataset(formData: FormData) {
   "use server";
   if (!(await temSessao())) redirect("/login");
-  const { status, corpo } = await chamarApi("/api/dataset/ingest", {
+  const { status, corpo } = await chamarApi("/api/dataset/ingestao", {
     method: "POST",
     body: JSON.stringify({
       author: "painel",
@@ -391,7 +391,7 @@ async function reancorarConfig(formData: FormData) {
 async function abrirRun() {
   "use server";
   if (!(await temSessao())) redirect("/login");
-  const { status, corpo } = await chamarApi("/api/run", {
+  const { status, corpo } = await chamarApi("/api/ledger/run", {
     method: "POST",
     body: JSON.stringify({ author: "painel" }),
   });
@@ -403,7 +403,7 @@ async function encerrarRun(formData: FormData) {
   "use server";
   if (!(await temSessao())) redirect("/login");
   const { status, corpo } = await chamarApi(
-    `/api/run/${formData.get("run_id")}/encerrar`,
+    `/api/ledger/run/${formData.get("run_id")}/encerrar`,
     { method: "POST", body: JSON.stringify({ estado: "concluido" }) },
   );
   revalidatePath("/");
@@ -413,7 +413,7 @@ async function encerrarRun(formData: FormData) {
 async function rodarComparacao() {
   "use server";
   if (!(await temSessao())) redirect("/login");
-  const { status, corpo } = await chamarApi("/api/comparacao", {
+  const { status, corpo } = await chamarApi("/api/baselines", {
     method: "POST",
     body: JSON.stringify({ author: "painel" }),
   });
@@ -435,7 +435,7 @@ async function rodarAgente() {
 async function provarReprodutibilidade() {
   "use server";
   if (!(await temSessao())) redirect("/login");
-  const { status, corpo } = await chamarApi("/api/reprodutibilidade", {
+  const { status, corpo } = await chamarApi("/api/relatorio/reprodutibilidade", {
     method: "POST",
     body: JSON.stringify({}),
   });
@@ -462,7 +462,7 @@ async function gravarSentinela(formData: FormData) {
   if (!(await temSessao())) redirect("/login");
   const label = String(formData.get("label") ?? "").trim();
   if (label) {
-    await chamarApi("/api/sentinel", {
+    await chamarApi("/api/diagnostico/sentinela", {
       method: "POST",
       body: JSON.stringify({ label }),
     });
@@ -491,17 +491,17 @@ export default async function Painel({
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
   ] = await Promise.all([
-    chamarApi("/api/health"),
+    chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
     chamarApi("/api/config"),
     chamarApi("/api/ledger"),
     chamarApi("/api/ledger/transacoes?limite=12"),
-    chamarApi("/api/sentinel"),
+    chamarApi("/api/diagnostico/sentinela"),
     chamarApi("/api/simulador"),
-    chamarApi("/api/execucoes?limite=10"),
-    chamarApi("/api/comparacao"),
+    chamarApi("/api/simulador/execucoes?limite=10"),
+    chamarApi("/api/baselines"),
     chamarApi("/api/agente"),
-    chamarApi("/api/curva"),
+    chamarApi("/api/baselines/curva"),
     chamarApi("/api/relatorio"),
   ]);
 
@@ -567,7 +567,7 @@ export default async function Painel({
               e quem le do outro lado tem de adivinhar o que era rotulo.
               O pacote e montado na api, pelas mesmas funcoes que servem
               cada tela - o painel so baixa (secao 10.2.1). */}
-          <a className="baixar" href="/api/proxy/exportar" download>
+          <a className="baixar" href="/api/proxy/relatorio/exportar" download>
             ↓ exportar estado (JSON)
           </a>
         </div>
