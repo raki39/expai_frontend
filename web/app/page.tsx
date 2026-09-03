@@ -82,8 +82,29 @@ type Agente = {
     confidence_ppm: number | null;
   } | null;
   patrimonio_final_cents?: number;
-  operacoes?: number;
+  /** Idas e voltas completas. `operacoes` era o nome, e ele valia isto
+   *  aqui e o dobro em `execucoes` - o mesmo rotulo para dois numeros. */
+  idas_e_voltas?: number;
+  ordens_executadas?: number;
   config_version_id?: number;
+  /** Por que o cerebro parou, do evento. Vinha so no corpo do POST: o
+   *  painel mostrava a parada e nunca a causa. */
+  parada?: {
+    node: string;
+    categoria: string | null;
+    motivo: string | null;
+    quando: string;
+    /** Paradas gravadas antes da migracao 13 nao tem categoria. */
+    registro_completo: boolean;
+  } | null;
+  /** Quem pode chamar isto de "resultado do agente", e por que.
+   *  Decidido pela api - decidir sobre o experimento nao acontece
+   *  aqui (regra 19). */
+  atribuicao?: {
+    atribuivel_ao_agente: boolean;
+    o_que_executou: string;
+    por_que: string;
+  };
   custos_cents?: {
     execucao_total: number;
     reflexao_total: number;
@@ -218,18 +239,18 @@ type Comparacao = ComparacaoAviso & {
   B2?: {
     run_id: number;
     equity_final_cents: number;
-    execucoes: number;
-    /** Idas e voltas. Vem da api: o painel dividia execucoes por
-     *  dois na tela, o que supunha que toda compra fechou. */
+    ordens_executadas: number;
+    /** Idas e voltas. Vem da api: o painel dividia ordens por dois na
+     *  tela, o que supunha que toda compra fechou. */
     idas_e_voltas: number;
     digest: string;
   };
   B3?: {
     run_id: number;
     equity_final_cents: number;
-    execucoes: number;
-    /** Idas e voltas. Vem da api: o painel dividia execucoes por
-     *  dois na tela, o que supunha que toda compra fechou. */
+    ordens_executadas: number;
+    /** Idas e voltas. Vem da api: o painel dividia ordens por dois na
+     *  tela, o que supunha que toda compra fechou. */
     idas_e_voltas: number;
     digest: string;
   };
@@ -733,6 +754,45 @@ export default async function Painel({
 
       {/* ================================================= 02 · RESULTADO */}
       <Secao id="resultado">
+        {/* DE QUEM E ESTE RESULTADO - antes de qualquer numero.
+            Um run em que o cerebro parou ainda tem patrimonio, ainda tem
+            giro e ainda tem curva. O que ele nao tem e uma decisao
+            cognitiva por tras, e sem este bloco a tela apresentava tudo
+            isso como desempenho do agente. Foi o que aconteceu com o run
+            27: "entre o p50 e o p95" sobre 244 idas e voltas que a regra
+            padrao produziu depois de o provedor falhar.
+
+            Quem decide e a api (regra 19); aqui so se mostra. */}
+        {ag.atribuicao && !ag.atribuicao.atribuivel_ao_agente ? (
+          <div className="aviso warn" style={{ marginTop: 0 }}>
+            <p>
+              <strong>Este resultado nao e do agente.</strong> Executou:{" "}
+              <strong>{ag.atribuicao.o_que_executou}</strong>.
+            </p>
+            <p className="sub" style={{ fontSize: 12.5 }}>
+              {ag.atribuicao.por_que}
+            </p>
+            {ag.parada ? (
+              <p className="sub" style={{ fontSize: 12.5, marginBottom: 0 }}>
+                Parou em <code>{ag.parada.node}</code>
+                {ag.parada.categoria ? (
+                  <>
+                    {" "}
+                    por <code>{ag.parada.categoria}</code>: {ag.parada.motivo}
+                  </>
+                ) : (
+                  <>
+                    {" "}
+                    — <strong>sem categoria registrada</strong>: esta parada e
+                    anterior a migracao 13, e o motivo dela existe so no log da
+                    plataforma. Um run novo registra a causa aqui.
+                  </>
+                )}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* A faixa de numeros-chave: o que a secao responde, antes das
             tabelas. O HEROI e o excesso sobre o controle, e nao o patrimonio
             absoluto - a regra 14 e explicita: desempenho SEMPRE como excesso
@@ -753,9 +813,11 @@ export default async function Painel({
           <Tile
             rotulo="Onde caiu na distribuicao"
             contexto={
-              ag.b1_casado
-                ? `${ag.b1_casado.repeticoes.toLocaleString("pt-BR")} repeticoes ao acaso`
-                : "sem controle comparavel"
+              ag.atribuicao && !ag.atribuicao.atribuivel_ao_agente
+                ? "nao se afirma: o resultado nao e do agente"
+                : ag.b1_casado
+                  ? `${ag.b1_casado.repeticoes.toLocaleString("pt-BR")} repeticoes ao acaso`
+                  : "sem controle comparavel"
             }
           >
             <span className={faixa?.tom}>{faixa?.texto ?? "—"}</span>
@@ -781,7 +843,7 @@ export default async function Painel({
                 : undefined
             }
           >
-            {(ag.operacoes ?? 0).toLocaleString("pt-BR")}
+            {(ag.idas_e_voltas ?? 0).toLocaleString("pt-BR")}
           </Tile>
           {/* `?? 0` aqui era mentira com consequencia: por D23, zero
               reflexoes significa que o agente E o B3. A tela mostrou "0" num
@@ -833,7 +895,7 @@ export default async function Painel({
                   <td>quem</td>
                   <td>o que mede</td>
                   <td className="num">patrimonio</td>
-                  <td className="num">operacoes</td>
+                  <td className="num">idas e voltas</td>
                   <td className="num">excesso</td>
                 </tr>
 
@@ -851,7 +913,7 @@ export default async function Painel({
                       <Dinheiro minor={ag.patrimonio_final_cents} moeda="USD" />
                     </td>
                     <td className="num">
-                      {(ag.operacoes ?? 0).toLocaleString("pt-BR")}
+                      {(ag.idas_e_voltas ?? 0).toLocaleString("pt-BR")}
                     </td>
                     <td className="num">
                       {/* Regra 14: desempenho SEMPRE como excesso sobre
@@ -1189,7 +1251,7 @@ export default async function Painel({
       <Secao id="execucao">
         <Tiles>
           <Tile rotulo="Idas e voltas" contexto="uma compra e a venda que a fecha">
-            {(ag.operacoes ?? 0).toLocaleString("pt-BR")}
+            {(ag.idas_e_voltas ?? 0).toLocaleString("pt-BR")}
           </Tile>
           <Tile
             rotulo="Execucoes"
