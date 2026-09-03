@@ -183,9 +183,16 @@ h2 .nota {
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   padding: 15px 17px;
+  /* Coluna, para que a nota de rodape possa ser empurrada para baixo e os
+   * cards de uma mesma linha terminem alinhados. Sem isto, cada card
+   * terminava na altura do proprio conteudo e a grade parecia quebrada. */
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .card + .card { margin-top: 14px; }
+.grade .card + .card, .duas .card + .card, .tres .card + .card { margin-top: 0; }
 
 .card h3 {
   font-size: 11px;
@@ -194,37 +201,161 @@ h2 .nota {
   letter-spacing: .07em;
   text-transform: uppercase;
   font-weight: 650;
+  /* O titulo nunca some numa linha compartilhada com o resto. */
+  flex: 0 0 auto;
 }
 
-.duas, .tres {
+/* A nota que explica o card. Vai para o fim da coluna, sempre - e o que faz
+ * cards vizinhos terminarem na mesma linha em vez de escalonados. */
+.card .nota-rodape {
+  margin: auto 0 0;
+  padding-top: 12px;
+  font-size: 12px;
+  color: var(--fraco);
+}
+.card .nota-rodape:first-child { margin-top: 0; }
+
+/* ============================================================== grades
+ *
+ * `.grade` e a grade padrao: cards de largura minima confortavel, quantos
+ * couberem por linha, TODOS com a mesma altura. Ela nao existia - havia
+ * `className="grade"` no markup e nenhuma regra com esse nome, entao aqueles
+ * cards caiam empilhados sem coluna nenhuma. Era literalmente "sem linhas e
+ * colunas".
+ *
+ * `.duas` e `.tres` continuam para quando o numero de colunas e uma decisao
+ * de leitura, e nao o que couber: dois livros lado a lado sao dois, nunca
+ * tres. */
+
+.grade, .duas, .tres {
   display: grid;
   gap: 14px;
   grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+@media (min-width: 720px) {
+  .grade { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 }
 @media (min-width: 860px) { .duas { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 1000px) { .tres { grid-template-columns: repeat(3, 1fr); } }
 
-/* Numero grande, para o valor que a secao existe para mostrar. */
-.metrica { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; }
-.metrica small { font-size: 12px; color: var(--tenue); margin-left: 6px; font-family: var(--sans); }
+/* Um card que precisa da linha inteira, dentro de qualquer grade. */
+.card.larga { grid-column: 1 / -1; }
 
-/* ============================================================ tabelas */
+/* ================================================== faixa de numeros-chave
+ *
+ * O que a secao responde, em numeros, antes de qualquer tabela. Existe
+ * porque a queixa era de varredura: para saber como o run foi era preciso
+ * ler tres tabelas e cruzar. */
+
+.tiles {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  margin: 0 0 14px;
+}
+
+.tile {
+  background: var(--fundo-2);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-s);
+  padding: 11px 13px;
+  min-width: 0;
+}
+
+.tile dt {
+  font-size: 11px;
+  color: var(--fraco);
+  margin: 0 0 5px;
+  /* Frase, nao nome de campo. `patrimonio_final_cents` e o nome da coluna;
+   * "patrimonio final" e o que a pessoa procura na tela. */
+  line-height: 1.35;
+}
+
+.tile dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 620;
+  line-height: 1.15;
+  color: var(--texto);
+  /* Figuras PROPORCIONAIS, de proposito. `tabular-nums` da a todo digito a
+   * largura do zero, o que alinha colunas mas deixa um numero grande e
+   * isolado frouxo - um "121" com buracos. Alinhamento tabular so onde ha
+   * coluna para alinhar, que e dentro das tabelas. */
+  font-variant-numeric: proportional-nums;
+  overflow-wrap: anywhere;
+}
+
+.tile .contexto {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--tenue);
+  line-height: 1.4;
+}
+
+.tile.destaque { border-color: var(--borda-forte); background: var(--fundo-3); }
+.tile.destaque dd { color: var(--destaque); }
+
+/* O numero que a pagina inteira existe para mostrar. Um por tela. */
+.heroi dd { font-size: 30px; font-weight: 660; }
+
+/* ============================================================ tabelas
+ *
+ * Duas formas, e a distincao importa:
+ *
+ *   `.kv`     rotulo a esquerda, valor a direita. Duas colunas, sempre.
+ *   `.dados`  varias colunas com cabecalho. Uma linha por registro.
+ *
+ * `td:first-child { width: 42% }` valia para TODA tabela do painel. Foi
+ * escrito para a forma rotulo/valor e se aplicava tambem as de cinco
+ * colunas: a primeira comia 42% e as outras quatro se espremiam no resto.
+ * Era a causa concreta de "tudo desalinhado". */
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 td, th { padding: 6px 0; vertical-align: top; text-align: left; font-weight: inherit; }
-td:first-child { color: var(--fraco); width: 42%; padding-right: 12px; }
 
-/* Dado tabular sempre em mono: comparar valores empilhados e a razao de a
- * tabela existir, e alinhamento de coluna e o que torna isso possivel. */
+/* Espaco lateral nas tabelas de varias colunas. Sem ele, colunas vizinhas se
+ * encostam e os cabecalhos leem como uma palavra so - a tela mostrava
+ * "PATRIMONIOOPERACOES" e a celula "18referencia". Numa tabela de duas
+ * colunas isso nao acontece porque a primeira tem largura fixa; foi por isso
+ * que passou despercebido ate a tela ser olhada com dado de verdade. */
+table.dados td, table.dados th { padding-left: 14px; }
+table.dados td:first-child, table.dados th:first-child { padding-left: 0; }
+
+table.kv td:first-child {
+  color: var(--fraco);
+  width: 42%;
+  padding-right: 12px;
+}
+
+table.dados { table-layout: auto; }
+table.dados thead td, table.dados thead th, tr.cabeca td {
+  color: var(--tenue);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  border-bottom: 1px solid var(--borda);
+  padding-bottom: 7px;
+  white-space: nowrap;
+}
+table.dados tbody td { border-bottom: 1px solid rgba(255, 255, 255, .03); }
+table.dados tbody tr:last-child td { border-bottom: 0; }
+/* Coluna de numero nunca quebra linha: a comparacao vertical e a razao de
+ * ela existir. */
+table.dados td.num, table.dados th.num { white-space: nowrap; width: 1%; }
+
+/* Dado tabular sempre em mono: numero, hash e timestamp so sao comparaveis
+ * empilhados se as colunas alinharem. */
 td.num, .num, td.mono, .hash, code { font-family: var(--mono); }
 td.num, .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 tr.total td { border-top: 1px solid var(--borda); padding-top: 9px; }
-tr.cabeca td { color: var(--tenue); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 tbody tr:hover td { background: rgba(255, 255, 255, .018); }
 
 .rolavel { overflow-x: auto; }
-.rolavel table { min-width: 520px; }
+.rolavel table { min-width: 560px; }
 
 /* ============================================================ estados */
 
@@ -353,3 +484,23 @@ footer {
 
 code { color: var(--destaque); font-size: 12.5px; }
 .hash { color: var(--destaque); font-size: 12px; }
+
+/* O export: a acao do cabecalho. Parece link porque nao muda nada no
+ * experimento - so tira uma copia do estado para fora da tela. */
+.topo .contexto a.baixar {
+  color: var(--destaque);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-s);
+  padding: 3px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.topo .contexto a.baixar:hover { background: var(--fundo-3); color: var(--texto); }
+
+/* A ultima explicacao de um card vai para o rodape dele, mesmo quando o
+ * markup nao usa <Nota>. E o que faz cards vizinhos numa grade terminarem
+ * na mesma linha em vez de escalonados conforme o tamanho do texto de cada
+ * um - a causa visivel de "cards desalinhados". */
+.grade .card > p.sub:last-child,
+.duas .card > p.sub:last-child,
+.tres .card > p.sub:last-child { margin-top: auto; padding-top: 12px; }

@@ -39,12 +39,35 @@ const B = 24;
 const W = 720;
 const H = 260;
 
-/** Cores por serie. O agente e a unica com traco cheio e forte. */
+/**
+ * Cores por serie, VALIDADAS contra a superficie escura do painel - nao
+ * escolhidas no olho.
+ *
+ * As anteriores reprovavam em quatro checagens, e uma delas importava de
+ * verdade: o verde da faixa de B1 (#3fa66a) e o dourado do B3 (#b08a3c)
+ * ficavam a ΔE 6,0 sob deuteranopia. Quem tem daltonismo vermelho-verde nao
+ * distinguia o B3 da faixa do acaso - que e exatamente a comparacao que a
+ * 0A existe para mostrar. B3 contra B2 dava ΔE 14 mesmo com visao normal,
+ * abaixo do piso de 15.
+ *
+ * Estas tres passam em TODOS os pares, inclusive sob as tres formas de
+ * daltonismo. Linhas se cruzam, entao qualquer duas podem ficar vizinhas -
+ * conferir so os pares adjacentes seria conferir menos do que o desenho faz.
+ */
 const COR: Record<string, string> = {
-  agente: "var(--acento, #4f7cff)",
-  B2: "#7a8899",
-  B3: "#b08a3c",
+  agente: "#3987e5",
+  B2: "#d95926",
+  B3: "#199e70",
 };
+
+/**
+ * A faixa de B1 e CINZA, sem matiz.
+ *
+ * Ela nao e uma quarta serie: e o fundo contra o qual as tres sao lidas.
+ * Dar-lhe um matiz proprio a punha para competir por identidade com as
+ * linhas - e foi assim que ela e o B3 acabaram indistinguiveis.
+ */
+const COR_FAIXA = "#8e97a6";
 
 const ROTULO: Record<string, string> = {
   agente: "agente",
@@ -183,15 +206,15 @@ export function Curva({
               y={py(faixa.p95)}
               width={46}
               height={Math.max(1, py(faixa.p5) - py(faixa.p95))}
-              fill="#3fa66a"
-              fillOpacity={0.16}
+              fill={COR_FAIXA}
+              fillOpacity={0.14}
             />
             <line
               x1={W - R - 46}
               x2={W - R}
               y1={py(faixa.p50)}
               y2={py(faixa.p50)}
-              stroke="#3fa66a"
+              stroke={COR_FAIXA}
               strokeWidth={1.5}
             />
             <text
@@ -199,7 +222,7 @@ export function Curva({
               y={py(faixa.p50) + 3}
               textAnchor="end"
               fontSize="9"
-              fill="#3fa66a"
+              fill={COR_FAIXA}
             >
               B1 p5–p95
             </text>
@@ -234,6 +257,25 @@ export function Curva({
             {ROTULO[nome] ?? nome} · {dinheiro(dados.finais_cents?.[nome])}
           </span>
         ))}
+        {/* A faixa entra na legenda como as linhas. Ela e uma marca com
+            significado no desenho, e uma legenda que descreve so parte do
+            que esta na tela obriga a adivinhar o resto. */}
+        {faixa ? (
+          <span className="sub" style={{ fontSize: 12 }}>
+            <span
+              style={{
+                display: "inline-block",
+                width: 14,
+                height: 9,
+                background: COR_FAIXA,
+                opacity: 0.5,
+                verticalAlign: "middle",
+                marginRight: 6,
+              }}
+            />
+            B1 p5–p95 · mediana {dinheiro(faixa.p50)}
+          </span>
+        ) : null}
       </div>
     </div>
   );

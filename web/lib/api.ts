@@ -20,6 +20,8 @@ function tokenDeServico(): string {
 export type RespostaApi = {
   status: number;
   corpo: unknown;
+  /** `Content-Disposition`, quando a rota nomeia o arquivo que devolve. */
+  disposicao?: string;
 };
 
 export async function chamarApi(
@@ -47,5 +49,9 @@ export async function chamarApi(
   } catch {
     // Deixa como texto: erro de infraestrutura raramente devolve JSON.
   }
-  return { status: resposta.status, corpo };
+  return {
+    status: resposta.status,
+    corpo,
+    disposicao: resposta.headers.get("content-disposition") ?? undefined,
+  };
 }

@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { chamarApi } from "@/lib/api";
 import { temSessao } from "@/lib/auth";
 import { Botao } from "./botao";
-import { Card, Dinheiro, Hash, Pill, Resultado, Utc } from "./ui";
+import { Card, Dinheiro, Hash, Nota, Pill, Resultado, Tile, Tiles, Utc } from "./ui";
 import { Curva, type DadosDaCurva } from "./curva";
 import { Estado, Nav, Secao } from "./secoes";
 
@@ -105,6 +105,10 @@ type Agente = {
     p50: number;
     p95: number;
   } | null;
+  /** Onde o resultado caiu na distribuicao do acaso. Classificado pela
+   *  api: classificar e decidir, e decidir sobre o experimento nao
+   *  acontece no painel (regra 19). */
+  faixa?: string;
   sobreposicao_amostral?: { sobreposicao_bps: number | null };
   condicoes_validade?: string;
   cache_de_respostas?: number;
@@ -211,8 +215,24 @@ type Comparacao = ComparacaoAviso & {
   existe: boolean;
   aviso?: string;
   condicoes_validade?: string;
-  B2?: { run_id: number; equity_final_cents: number; execucoes: number; digest: string };
-  B3?: { run_id: number; equity_final_cents: number; execucoes: number; digest: string };
+  B2?: {
+    run_id: number;
+    equity_final_cents: number;
+    execucoes: number;
+    /** Idas e voltas. Vem da api: o painel dividia execucoes por
+     *  dois na tela, o que supunha que toda compra fechou. */
+    idas_e_voltas: number;
+    digest: string;
+  };
+  B3?: {
+    run_id: number;
+    equity_final_cents: number;
+    execucoes: number;
+    /** Idas e voltas. Vem da api: o painel dividia execucoes por
+     *  dois na tela, o que supunha que toda compra fechou. */
+    idas_e_voltas: number;
+    digest: string;
+  };
   B1_representativa?: { run_id: number; equity_final_cents: number };
   B1?: {
     repeticoes: number;
@@ -254,6 +274,28 @@ type Relatorio = {
     se_nao_fecha: string;
   };
   nao_concluido?: string[];
+};
+
+/**
+ * Como cada faixa se escreve na tela. Traducao, nao classificacao: quem
+ * decide em qual faixa o resultado caiu e a api.
+ *
+ * Sao QUATRO, e as quatro importam. Com tres, "abaixo da mediana" servia
+ * tambem para quem esta abaixo do p5 - e perder de 95% do acaso e afirmacao
+ * diferente de perder de 51%.
+ */
+const FAIXA: Record<string, { tom: string; texto: string; alerta?: string }> = {
+  acima_p95: { tom: "ok", texto: "acima do p95" },
+  entre_p50_e_p95: { tom: "warn", texto: "entre a mediana e o p95" },
+  entre_p5_e_p50: { tom: "bad", texto: "entre o p5 e a mediana" },
+  abaixo_p5: {
+    tom: "bad",
+    texto: "abaixo do p5",
+    alerta:
+      "Ou seja: mais de 95% das entradas ao acaso, com esse mesmo giro e esse" +
+      " mesmo dimensionamento, teriam terminado melhor.",
+  },
+  sem_controle: { tom: "warn", texto: "sem controle comparavel" },
 };
 
 type Sentinelas = {
@@ -491,6 +533,7 @@ export default async function Painel({
   const rel = relatorio.status === 200 ? (relatorio.corpo as Relatorio) : null;
   const cfg = c?.config ?? null;
 
+    const faixa = ag.faixa ? FAIXA[ag.faixa] : undefined;
   const comparacaoVelha = cmp.existe && cmp.sob_a_config_vigente === false;
   const conferenciasOk =
     l &&
@@ -507,6 +550,14 @@ export default async function Painel({
           <span>build {h.build}</span>
           <span>{h.app_env}</span>
           <span>schema v{h.schema_version}</span>
+          {/* O estado inteiro num arquivo, para sair da tela e virar anexo.
+              Texto copiado do navegador perde a estrutura: campo vira prosa
+              e quem le do outro lado tem de adivinhar o que era rotulo.
+              O pacote e montado na api, pelas mesmas funcoes que servem
+              cada tela - o painel so baixa (secao 10.2.1). */}
+          <a className="baixar" href="/api/proxy/exportar" download>
+            ↓ exportar estado (JSON)
+          </a>
         </div>
       </div>
 
@@ -544,7 +595,7 @@ export default async function Painel({
             <>
               #{ag.run_id}{" "}
               <small className="sub">
-                {ag.caminho.filter((e) => e.provider).length} reflexao(oes)
+                {ag.reflexoes ?? "?"} reflexoes
               </small>
             </>
           ) : (
@@ -670,6 +721,74 @@ export default async function Painel({
 
       {/* ================================================= 02 · RESULTADO */}
       <Secao id="resultado">
+        {/* A faixa de numeros-chave: o que a secao responde, antes das
+            tabelas. O HEROI e o excesso sobre o controle, e nao o patrimonio
+            absoluto - a regra 14 e explicita: desempenho SEMPRE como excesso
+            sobre baseline. "Sobrou US$ 620" nao responde pergunta nenhuma
+            sem dizer quanto o acaso teria deixado. */}
+        <Tiles>
+          <Tile
+            rotulo="Excesso sobre o acaso"
+            heroi
+            destaque
+            contexto="contra a mediana do B1 casado — mesmo giro, mesmo tamanho de posicao"
+          >
+            <Dinheiro
+              minor={cv.excesso_cents?.agente_sobre_B1_casado_p50}
+              moeda="USD"
+            />
+          </Tile>
+          <Tile
+            rotulo="Onde caiu na distribuicao"
+            contexto={
+              ag.b1_casado
+                ? `${ag.b1_casado.repeticoes.toLocaleString("pt-BR")} repeticoes ao acaso`
+                : "sem controle comparavel"
+            }
+          >
+            <span className={faixa?.tom}>{faixa?.texto ?? "—"}</span>
+          </Tile>
+          <Tile
+            rotulo="Patrimonio final"
+            contexto={
+              cfg?.seed_capital_usd_cents ? (
+                <>
+                  sobre <Dinheiro minor={cfg.seed_capital_usd_cents} moeda="USD" />{" "}
+                  de capital semente
+                </>
+              ) : undefined
+            }
+          >
+            <Dinheiro minor={ag.patrimonio_final_cents} moeda="USD" />
+          </Tile>
+          <Tile
+            rotulo="Idas e voltas"
+            contexto={
+              ag.b1_casado
+                ? `o controle fez as mesmas ${ag.b1_casado.operacoes_alvo}`
+                : undefined
+            }
+          >
+            {(ag.operacoes ?? 0).toLocaleString("pt-BR")}
+          </Tile>
+          {/* `?? 0` aqui era mentira com consequencia: por D23, zero
+              reflexoes significa que o agente E o B3. A tela mostrou "0" num
+              run com duas reflexoes so porque a api nao mandava o campo -
+              ausencia virando afirmacao, que e o que a secao 5.2 proibe no
+              custo e vale igual aqui. */}
+          <Tile
+            rotulo="Reflexoes neste run"
+            contexto={
+              ag.reflexoes === undefined
+                ? "a api nao informou"
+                : ag.reflexoes === 0
+                  ? "com zero, o agente e o proprio B3 (D23)"
+                  : "cada uma custou dinheiro de verdade"
+            }
+          >
+            {ag.reflexoes ?? "—"}
+          </Tile>
+        </Tiles>
         {comparacaoVelha ? (
           <div className="aviso bad" style={{ marginTop: 0 }}>
             <p>
@@ -696,10 +815,10 @@ export default async function Painel({
         <div className="card">
           <h3>Resultado final e excesso sobre baseline</h3>
           <div className="rolavel">
-            <table>
+            <table className="dados">
               <tbody>
                 <tr className="cabeca">
-                  <td style={{ width: "auto" }}>quem</td>
+                  <td>quem</td>
                   <td>o que mede</td>
                   <td className="num">patrimonio</td>
                   <td className="num">operacoes</td>
@@ -798,9 +917,7 @@ export default async function Painel({
                     <td className="num">
                       <Dinheiro minor={cmp.B3.equity_final_cents} moeda="USD" />
                     </td>
-                    <td className="num">
-                      {Math.floor(cmp.B3.execucoes / 2)}
-                    </td>
+                    <td className="num">{cmp.B3.idas_e_voltas ?? "—"}</td>
                     <td className="num">
                       <Dinheiro
                         minor={cv.excesso_cents?.agente_sobre_B3}
@@ -832,35 +949,15 @@ export default async function Painel({
               abaixo do p5 e verdade e subestima: perder de 95% do acaso e
               afirmacao diferente de perder de 51%, e arredondar a leitura para
               o lado confortavel e a mesma doenca de sempre. */}
-          {ag.b1_casado && ag.patrimonio_final_cents !== undefined ? (
-            <div
-              className={`aviso ${
-                ag.patrimonio_final_cents > ag.b1_casado.p95
-                  ? "ok"
-                  : ag.patrimonio_final_cents > ag.b1_casado.p50
-                    ? "warn"
-                    : "bad"
-              }`}
-            >
+          {faixa ? (
+            <div className={`aviso ${faixa.tom}`}>
               <p>
-                O agente esta{" "}
-                <strong>
-                  {ag.patrimonio_final_cents > ag.b1_casado.p95
-                    ? "acima do p95"
-                    : ag.patrimonio_final_cents > ag.b1_casado.p50
-                      ? "entre a mediana e o p95"
-                      : ag.patrimonio_final_cents >= ag.b1_casado.p5
-                        ? "entre o p5 e a mediana"
-                        : "abaixo do p5"}
-                </strong>{" "}
-                da distribuicao do acaso com o mesmo giro e o mesmo tamanho de
-                posicao.
-                {ag.patrimonio_final_cents < ag.b1_casado.p5 ? (
+                O agente esta <strong>{faixa.texto}</strong> da distribuicao do
+                acaso com o mesmo giro e o mesmo tamanho de posicao.
+                {faixa.alerta ? (
                   <>
                     {" "}
-                    Ou seja: <strong>mais de 95% das entradas ao acaso</strong>,
-                    com esse mesmo giro e esse mesmo dimensionamento, teriam
-                    terminado melhor.
+                    <strong>{faixa.alerta}</strong>
                   </>
                 ) : null}{" "}
                 <strong>Isto e leitura, nao conclusao</strong> — e o resultado e
@@ -874,12 +971,54 @@ export default async function Painel({
 
       {/* =================================================== 03 · DECISAO */}
       <Secao id="decisao">
+        <Tiles>
+          <Tile
+            rotulo="Custo do pensamento"
+            contexto="dinheiro real que saiu da conta neste run"
+          >
+            <Dinheiro minor={ag.gasto?.gasto_real_brl_cents} moeda="BRL" />
+          </Tile>
+          <Tile
+            rotulo="Chamadas que custaram"
+            contexto={
+              ag.gasto && ag.reflexoes !== undefined
+                ? `de ${ag.reflexoes} reflexoes — o resto veio do cache`
+                : undefined
+            }
+          >
+            {ag.gasto?.chamadas_com_custo ?? 0}
+          </Tile>
+          <Tile
+            rotulo="Regra em vigor"
+            contexto={
+              ag.regra_ativa ? "proposta pelo cerebro" : "padrao, derivada da config (D23)"
+            }
+          >
+            {ag.regra_ativa?.family ?? "cruzamento_medias"}
+          </Tile>
+          <Tile
+            rotulo="Confianca declarada"
+            contexto="antes de executar, junto da expectativa (regra 17)"
+          >
+            {ag.regra_ativa?.confidence_ppm != null
+              ? `${(ag.regra_ativa.confidence_ppm / 10000).toFixed(0)}%`
+              : "—"}
+          </Tile>
+          <Tile
+            rotulo="Sobreposicao com a janela executada"
+            contexto="100% significa resultado inteiramente em amostra (D22)"
+          >
+            {ag.sobreposicao_amostral?.sobreposicao_bps != null
+              ? `${(ag.sobreposicao_amostral.sobreposicao_bps / 100).toFixed(0)}%`
+              : "—"}
+          </Tile>
+        </Tiles>
         {ag.run_id ? (
           <>
             {ag.regra_ativa ? (
               <div className="card">
                 <h3>Regra proposta e intencao declarada</h3>
-                <table>
+                <table className="kv">
                   <tbody>
                     <tr>
                       <td>familia</td>
@@ -932,20 +1071,20 @@ export default async function Painel({
             <div className="card">
               <h3>Caminho percorrido, e o que cada etapa custou</h3>
               <div className="rolavel">
-                <table>
+                <table className="dados">
                   <tbody>
                     <tr className="cabeca">
-                      <td style={{ width: "auto" }}>no</td>
+                      <td>no</td>
                       <td>tier</td>
                       <td className="num">entrada</td>
                       <td className="num">saida</td>
-                      <td className="num">cache le</td>
-                      <td className="num">cache grava</td>
+                      <td className="num">cache lido</td>
+                      <td className="num">cache gravado</td>
                       <td className="num">custo</td>
                     </tr>
                     {ag.caminho.map((e) => (
                       <tr key={e.id}>
-                        <td style={{ width: "auto" }}>
+                        <td>
                           <code>{e.node}</code>{" "}
                           <span className="sub">{e.kind}</span>
                         </td>
@@ -1036,12 +1175,29 @@ export default async function Painel({
 
       {/* ================================================== 04 · EXECUCAO */}
       <Secao id="execucao">
+        <Tiles>
+          <Tile rotulo="Idas e voltas" contexto="uma compra e a venda que a fecha">
+            {(ag.operacoes ?? 0).toLocaleString("pt-BR")}
+          </Tile>
+          <Tile
+            rotulo="Execucoes"
+            contexto="linhas de ordem — o dobro das idas e voltas, quando todas fecham"
+          >
+            {(sim.execucoes ?? 0).toLocaleString("pt-BR")}
+          </Tile>
+          <Tile rotulo="Custo total de execucao" contexto="taxa, spread, slippage e penalidade">
+            <Dinheiro minor={ag.custos_cents?.execucao_total} moeda="USD" />
+          </Tile>
+          <Tile rotulo="Fidelidade da simulacao" contexto="nivel 1 — barras OHLCV, sem book">
+            {sim.fidelity_level ?? "—"}
+          </Tile>
+        </Tiles>
         <div className="duas">
           <Card titulo="Custos, decompostos">
             {/* Um campo "custo" agregado nao passaria no criterio 3 do
                 incremento 3: sem separar, e impossivel saber depois qual
                 componente comeu o resultado. */}
-            <table>
+            <table className="kv">
               <tbody>
                 <tr>
                   <td>taxa (taker)</td>
@@ -1078,7 +1234,7 @@ export default async function Painel({
           </Card>
 
           <Card titulo="Estado da simulacao">
-            <table>
+            <table className="kv">
               <tbody>
                 <tr>
                   <td>execucoes</td>
@@ -1122,10 +1278,10 @@ export default async function Painel({
           <h3>Execucoes recentes</h3>
           {exec.length ? (
             <div className="rolavel">
-              <table>
+              <table className="dados">
                 <tbody>
                   <tr className="cabeca">
-                    <td style={{ width: "auto" }}>lado</td>
+                    <td>lado</td>
                     <td>decisao</td>
                     <td>execucao</td>
                     <td className="num">quantidade</td>
@@ -1134,7 +1290,7 @@ export default async function Painel({
                   </tr>
                   {exec.map((e) => (
                     <tr key={e.id}>
-                      <td style={{ width: "auto" }}>
+                      <td>
                         <span
                           className={`pill ${
                             e.side === "compra" ? "neutro" : "neutro"
@@ -1182,7 +1338,7 @@ export default async function Painel({
 
         <div className="duas">
           <Card titulo="Livro simulado (USD)">
-            <table>
+            <table className="kv">
               <tbody>
                 <tr>
                   <td>caixa</td>
@@ -1225,7 +1381,7 @@ export default async function Painel({
           </Card>
 
           <Card titulo="Livro real (BRL)">
-            <table>
+            <table className="kv">
               <tbody>
                 <tr>
                   <td>caixa da tesouraria</td>
@@ -1275,10 +1431,10 @@ export default async function Painel({
 
           {tx.length ? (
             <div className="rolavel" style={{ marginTop: 14 }}>
-              <table>
+              <table className="dados">
                 <tbody>
                   <tr className="cabeca">
-                    <td style={{ width: "auto" }}>id</td>
+                    <td>id</td>
                     <td>tipo</td>
                     <td>quando</td>
                     <td className="num">lanc.</td>
@@ -1360,7 +1516,7 @@ export default async function Painel({
 
         <div className="duas">
           <Card titulo={`Versao ${h.config_version ?? "—"} — vigente`}>
-            <table>
+            <table className="kv">
               <tbody>
                 <tr>
                   <td>config_hash</td>
@@ -1411,7 +1567,7 @@ export default async function Painel({
 
           <Card titulo="Dataset fixado">
             {d.existe ? (
-              <table>
+              <table className="kv">
                 <tbody>
                   <tr>
                     <td>sha256</td>
@@ -1533,7 +1689,7 @@ export default async function Painel({
 
             <div className="grade">
               <Card titulo="As doze condicoes">
-                <table>
+                <table className="kv">
                   <tbody>
                     {Object.entries(rel.resposta_da_0a?.condicoes ?? {}).map(
                       ([nome, valor]) => (
@@ -1547,18 +1703,18 @@ export default async function Painel({
                     )}
                   </tbody>
                 </table>
-                <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                <Nota>
                   <strong>Nao se aplica nao e nao.</strong> Com o teto em zero
                   nao ha custo de decisao a registrar (D23), e reprovar o run
                   por essa ausencia confundiria "nao sei" com "nao" — a mesma
                   confusao que a secao 5.2 proibe no custo.
-                </p>
+                </Nota>
               </Card>
 
               <Card titulo="Reprodutibilidade (R12)">
                 {rel.reprodutibilidade ? (
                   <>
-                    <table>
+                    <table className="kv">
                       <tbody>
                         <tr>
                           <td>mesma semente, A</td>
@@ -1622,11 +1778,11 @@ export default async function Painel({
                 <form action={provarReprodutibilidade} style={{ marginTop: 10 }}>
                   <Botao pendente="provando…">Rodar a prova</Botao>
                 </form>
-                <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                <Nota>
                   Tres runs de B1 pelo ledger.{" "}
                   <strong>Nenhuma chamada de LLM</strong> — a prova nao pode
                   custar dinheiro nem depender de o cache estar quente.
-                </p>
+                </Nota>
               </Card>
 
               <Card titulo="Vinculo nos dois sentidos (R25.2)">
@@ -1644,10 +1800,10 @@ export default async function Painel({
                     {rel.vinculo?.motivo ?? "Nao conferido."}
                   </p>
                 )}
-                <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                <Nota>
                   Conferido nos dois sentidos de proposito: um vinculo que so
                   funciona num deles passaria em duas consultas isoladas.
-                </p>
+                </Nota>
               </Card>
 
               <Card titulo="Relatorio completo">
@@ -1679,7 +1835,7 @@ export default async function Painel({
       <Secao id="substrato">
         <div className="duas">
           <Card titulo="Credenciais e volume">
-            <table>
+            <table className="kv">
               <tbody>
                 <tr>
                   <td>credencial anthropic</td>
@@ -1731,7 +1887,7 @@ export default async function Painel({
               <Botao pendente="gravando…">Gravar</Botao>
             </form>
             {s?.items?.length ? (
-              <table style={{ marginTop: 12 }}>
+              <table className="kv" style={{ marginTop: 12 }}>
                 <tbody>
                   {s.items.slice(0, 5).map((x) => (
                     <tr key={x.id}>

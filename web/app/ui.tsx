@@ -65,14 +65,76 @@ export function Utc({ ms }: { ms?: number | null }) {
 export function Card({
   titulo,
   children,
+  larga = false,
 }: {
   titulo?: string;
   children: ReactNode;
+  /** Ocupa a linha inteira da grade. Para tabela larga ou texto corrido. */
+  larga?: boolean;
 }) {
   return (
-    <div className="card">
+    <div className={larga ? "card larga" : "card"}>
       {titulo ? <h3>{titulo}</h3> : null}
       {children}
+    </div>
+  );
+}
+
+/**
+ * A nota que explica o card, ancorada no rodape dele.
+ *
+ * Fica no fim da coluna de proposito: e o que faz cards vizinhos terminarem
+ * na mesma linha em vez de escalonados conforme o tamanho do texto de cada
+ * um. Era a causa visivel de "cards desalinhados".
+ */
+export function Nota({ children }: { children: ReactNode }) {
+  return <p className="nota-rodape">{children}</p>;
+}
+
+/**
+ * Faixa de numeros-chave: o que a secao responde, antes de qualquer tabela.
+ *
+ * Existe porque a queixa era de varredura - para saber como o run foi era
+ * preciso ler tres tabelas e cruzar de cabeca.
+ */
+export function Tiles({ children }: { children: ReactNode }) {
+  return <dl className="tiles">{children}</dl>;
+}
+
+/**
+ * Um numero com o que ele significa.
+ *
+ * `rotulo` e FRASE, nao nome de campo: `patrimonio_final_cents` e o nome da
+ * coluna no banco; "patrimonio final" e o que a pessoa procura na tela. O
+ * nome tecnico continua alcancavel no JSON cru de cada secao.
+ *
+ * `contexto` e a linha que evita a leitura errada - "sobre US$ 1.000 de
+ * capital semente" muda o que o numero acima quer dizer.
+ */
+export function Tile({
+  rotulo,
+  children,
+  contexto,
+  destaque = false,
+  heroi = false,
+}: {
+  rotulo: string;
+  children: ReactNode;
+  contexto?: ReactNode;
+  destaque?: boolean;
+  /** O unico numero que a pagina inteira existe para mostrar. Um por tela. */
+  heroi?: boolean;
+}) {
+  const classes = ["tile", destaque ? "destaque" : "", heroi ? "heroi" : ""]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div className={classes}>
+      <dt>{rotulo}</dt>
+      <dd>
+        {children}
+        {contexto ? <span className="contexto">{contexto}</span> : null}
+      </dd>
     </div>
   );
 }

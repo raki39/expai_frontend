@@ -40,10 +40,17 @@ async function repassar(
   const caminho = `/api/${path.join("/")}${busca}`;
 
   const corpoEnviado = metodo === "POST" ? await request.text() : undefined;
-  const { status, corpo } = await chamarApi(caminho, {
+  const { status, corpo, disposicao } = await chamarApi(caminho, {
     method: metodo,
     body: corpoEnviado,
   });
+
+  // O export nomeia o proprio arquivo com data e hora. Deixar o cabecalho
+  // para tras faria todo download se chamar "exportar", e dois estados
+  // diferentes do experimento chegariam com o mesmo nome - que e como se
+  // troca um pelo outro sem perceber.
+  const cabecalhos: Record<string, string> = {};
+  if (disposicao) cabecalhos["content-disposition"] = disposicao;
 
   // Nem toda rota devolve JSON: `/api/relatorio/markdown` devolve texto, e
   // `chamarApi` deixa como string quando o parse falha. Empacotar isso em
@@ -53,11 +60,11 @@ async function repassar(
   if (typeof corpo === "string") {
     return new NextResponse(corpo, {
       status,
-      headers: { "content-type": "text/markdown; charset=utf-8" },
+      headers: { ...cabecalhos, "content-type": "text/markdown; charset=utf-8" },
     });
   }
 
-  return NextResponse.json(corpo, { status });
+  return NextResponse.json(corpo, { status, headers: cabecalhos });
 }
 
 export async function GET(
