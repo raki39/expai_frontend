@@ -303,6 +303,18 @@ type Sentinelas = {
   items: { id: number; label: string; created_at: string }[];
 };
 
+/**
+ * Da um ponto de quebra a um identificador tecnico (`cruzamento_medias`).
+ *
+ * Sem espaco nenhum, o navegador so quebra ESSE tipo de string no meio do
+ * caractere quando o espaco da tile acaba - medido: "cruzamento_med" +
+ * "ias". Um espaco largura-zero depois de cada `_` da um ponto de quebra
+ * exatamente onde o nome ja se separa em partes, sem mudar o texto visivel.
+ */
+function quebravel(texto: string, separadores: RegExp = /_/g): string {
+  return texto.replace(separadores, (s) => s + "​");
+}
+
 /** Preco vem com 8 casas decimais, como inteiro. A divisao acontece so aqui. */
 function preco(escalado: number): string {
   return (escalado / 1e8).toLocaleString("pt-BR", {
@@ -994,7 +1006,7 @@ export default async function Painel({
               ag.regra_ativa ? "proposta pelo cerebro" : "padrao, derivada da config (D23)"
             }
           >
-            {ag.regra_ativa?.family ?? "cruzamento_medias"}
+            {quebravel(ag.regra_ativa?.family ?? "cruzamento_medias")}
           </Tile>
           <Tile
             rotulo="Confianca declarada"
@@ -1687,7 +1699,7 @@ export default async function Painel({
               )}
             </div>
 
-            <div className="grade">
+            <div className="grade grade-livre">
               <Card titulo="As doze condicoes">
                 <table className="kv">
                   <tbody>
@@ -1852,7 +1864,7 @@ export default async function Painel({
                 <tr>
                   <td>banco</td>
                   <td className="num mono" style={{ fontSize: 12 }}>
-                    {h.db_path}
+                    {quebravel(h.db_path, /[\\/]/g)}
                   </td>
                 </tr>
                 <tr>

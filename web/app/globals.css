@@ -54,6 +54,10 @@ body {
     var(--fundo);
   color: var(--texto);
   -webkit-font-smoothing: antialiased;
+  /* Rede de seguranca: um conteudo tecnico sem ponto de quebra (JSON, um
+   * caminho de arquivo) nao pode empurrar a PAGINA para rolagem horizontal.
+   * Uma tabela larga rola dentro de si mesma (.rolavel); o body, nunca. */
+  overflow-x: hidden;
 }
 
 main { max-width: 1160px; margin: 0 auto; padding: 0 20px 110px; }
@@ -85,19 +89,33 @@ main { max-width: 1160px; margin: 0 auto; padding: 0 20px 110px; }
   flex-wrap: wrap;
 }
 
-/* Barra de estado: a resposta a "onde estamos" sem rolar a pagina. */
+/* Barra de estado: a resposta a "onde estamos" sem rolar a pagina.
+ *
+ * FLEXBOX, e nao grid. Com `grid-template-columns: repeat(auto-fit, ...)`,
+ * a contagem de colunas e fixada para a grade INTEIRA: quando so 4 das 5
+ * celulas cabem numa linha, a quinta cai numa linha nova mas ocupa so a
+ * PRIMEIRA coluna dessa grade de 4 - as outras 3 ficam vazias, mostrando
+ * so o fundo do container (`--borda`, quase identico a `--fundo-2` das
+ * celulas). O resultado era um retangulo cinza fantasma esticado pela
+ * largura toda, parecendo uma celula quebrada. Com flex-wrap, cada LINHA
+ * redistribui o espaco entre so os itens que ela de fato tem. */
 .resumo {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1px;
-  background: var(--borda);
+  display: flex;
+  flex-wrap: wrap;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   overflow: hidden;
   margin-bottom: 8px;
 }
 
-.resumo > div { background: var(--fundo-2); padding: 11px 14px; }
+.resumo > div {
+  flex: 1 1 150px;
+  background: var(--fundo-2);
+  padding: 11px 14px;
+  border-right: 1px solid var(--borda);
+  border-bottom: 1px solid var(--borda);
+}
+.resumo > div:last-child { border-right: none; }
 .resumo dt {
   margin: 0;
   color: var(--tenue);
@@ -237,6 +255,14 @@ h2 .nota {
 @media (min-width: 720px) {
   .grade { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 }
+
+/* `.grade-livre`: os tres cards da secao Fechamento tem quantidade de
+ * conteudo muito diferente entre si (doze condicoes vs um resumo curto de
+ * tres linhas) - esticar todos a mesma altura (o padrao de `.grade`) deixava
+ * mais de 400px de vazio dentro dos dois cards curtos, parecendo card
+ * quebrado/incompleto em vez de organizado. Aqui cada card so cresce ate a
+ * PROPRIA altura. */
+.grade-livre { align-items: start; }
 @media (min-width: 860px) { .duas { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 1000px) { .tres { grid-template-columns: repeat(3, 1fr); } }
 
@@ -252,7 +278,16 @@ h2 .nota {
 .tiles {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  /* 210px, e nao 155px. `Number.toLocaleString("pt-BR", {style:"currency"})`
+   * poe um ESPACO LARGURA-ZERO NAO QUEBRAVEL (U+00A0) entre o simbolo e o
+   * valor - certo tipograficamente (a moeda nunca deveria separar do
+   * numero), mas sem NENHUM ponto de quebra no texto inteiro. Com 155px
+   * (~145px uteis apos o padding), "US$ 44,43" nao cabia inteiro e o
+   * `break-word` forcava a quebra NO MEIO DO NUMERO: "US$ 44,4" + "3".
+   * Medido nos quatro larguras de tela testadas. 210px sobra espaco de
+   * verdade, ao custo de uma tile a menos por linha nas telas mais
+   * estreitas - troca certa: correcao do texto vale mais que densidade. */
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   margin: 0 0 14px;
 }
 
@@ -284,7 +319,14 @@ h2 .nota {
    * isolado frouxo - um "121" com buracos. Alinhamento tabular so onde ha
    * coluna para alinhar, que e dentro das tabelas. */
   font-variant-numeric: proportional-nums;
-  overflow-wrap: anywhere;
+  /* `anywhere` quebrava numero e palavra NO MEIO do caractere - medido:
+   * "US$ 44,43" virava "US$ 44,4" + "3" numa tile estreita. `break-word` so
+   * forca a quebra quando nao ha ponto de quebra natural; "US$ 44,43" tem um
+   * ESPACO entre os dois tokens, e a quebra acontece ali, nunca dentro do
+   * numero. Um identificador sem espaco (`cruzamento_medias`) ainda pode
+   * quebrar no meio quando não ha alternativa - ver `quebravel()` em
+   * page.tsx para o caso em que isso importa. */
+  overflow-wrap: break-word;
 }
 
 .tile .contexto {
@@ -314,7 +356,13 @@ h2 .nota {
  * Era a causa concreta de "tudo desalinhado". */
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-td, th { padding: 6px 0; vertical-align: top; text-align: left; font-weight: inherit; }
+td, th {
+  padding: 6px 0; vertical-align: top; text-align: left; font-weight: inherit;
+  /* JSON de parametros e caminho de arquivo (Windows, barra invertida) sao
+   * uma sequencia sem espaco nenhum - sem isto, a celula so cresce e
+   * estoura a largura do card em vez de quebrar linha. */
+  overflow-wrap: break-word;
+}
 
 /* Espaco lateral nas tabelas de varias colunas. Sem ele, colunas vizinhas se
  * encostam e os cabecalhos leem como uma palavra so - a tela mostrava
@@ -323,6 +371,15 @@ td, th { padding: 6px 0; vertical-align: top; text-align: left; font-weight: inh
  * que passou despercebido ate a tela ser olhada com dado de verdade. */
 table.dados td, table.dados th { padding-left: 14px; }
 table.dados td:first-child, table.dados th:first-child { padding-left: 0; }
+
+/* `table-layout: fixed` e o que faz o `width:42%` do rotulo (e o ~58% que
+ * sobra para o valor) valerem de verdade. Em `auto` (o padrao), o navegador
+ * mede o CONTEUDO antes de decidir a largura da coluna - um JSON ou um
+ * caminho de arquivo sem espaco nenhum empurra a coluna do valor a ser larga
+ * o bastante para caber INTEIRO numa linha so, e so DEPOIS o `overflow-wrap`
+ * entra em acao - tarde demais, a coluna ja estourou o card. Com `fixed`, a
+ * largura e travada ANTES, e o texto e obrigado a quebrar dentro dela. */
+table.kv { table-layout: fixed; }
 
 table.kv td:first-child {
   color: var(--fraco);
