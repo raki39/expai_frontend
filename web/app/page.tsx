@@ -406,6 +406,59 @@ type PortaoA = {
   nao_responde?: string[];
 };
 
+/** O Portao B. `avaliado: false` quando o A nao passou (R49) - e ai o corpo
+ *  NAO traz criterio nenhum, nem parcial. */
+type PortaoB = {
+  existe?: boolean;
+  avaliado: boolean;
+  por_que?: string;
+  portao_a?: { passa: boolean; reprovando: string[]; pendentes: string[] };
+  quantas?: number;
+  passaram?: number[];
+  inconclusivas?: number[];
+  sem_candidata?: boolean;
+  por_que_sem_candidata?: string | null;
+  ha_candidata_digna_de_auditoria?: boolean;
+  auditoria?: string | null;
+  o_que_aprovar_nao_significa?: string[];
+  por_credito?: {
+    agente_supera_b4: boolean | null;
+    por_que_sem_comparacao: string | null;
+    agente: { sustentadas: number; creditos_consumidos: number; por_credito_ppm: number | null };
+    b4: { sustentadas: number; creditos_consumidos: number; por_credito_ppm: number | null };
+  };
+  candidatas?: {
+    hypothesis_id: number;
+    run_id: number;
+    resultado: string;
+    parecer_in_sample: string | null;
+    patrimonio_final_cents: number;
+    capital_semente_cents: number;
+    excesso_sobre_b2_cents: number | null;
+    excesso_sobre_b3_cents: number | null;
+    criterios: Record<string, boolean | null>;
+    reprovando: string[];
+    sem_medida: string[];
+    dsr?: { disponivel?: boolean; dsr_milesimos?: number; aprovado?: boolean; por_que?: string };
+    walk_forward?: {
+      executado: boolean;
+      por_que?: string;
+      quantas?: number;
+      mantidas?: number;
+      nao_observadas?: number;
+      minimo_de_janelas?: number;
+      janelas?: {
+        ordem: number;
+        barras: number;
+        idas_e_voltas: number;
+        observado: number | null;
+        efeito_minimo: number;
+        manteve: boolean | null;
+      }[];
+    };
+  }[];
+};
+
 type ConfigResposta = {
   version_id: number;
   config_hash: string;
@@ -757,6 +810,17 @@ async function rodarA1b(formData: FormData) {
   paraPainel(status, corpo, "a1b");
 }
 
+async function rodarPortaoB() {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/relatorio/portao-b", {
+    method: "POST",
+    body: JSON.stringify({ author: "painel" }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "portaob");
+}
+
 async function provarReprodutibilidade() {
   "use server";
   if (!(await temSessao())) redirect("/login");
@@ -807,6 +871,7 @@ export default async function Painel({
     comparacao?: string;
     agente?: string;
     b4?: string;
+    portaob?: string;
     a1a?: string;
     a1b?: string;
     detalhe?: string;
@@ -818,7 +883,7 @@ export default async function Painel({
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
-    separacao, lote, creditos, b4, a1a, a1b, portaoA,
+    separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -839,6 +904,7 @@ export default async function Painel({
     chamarApi("/api/a1a"),
     chamarApi("/api/a1b"),
     chamarApi("/api/relatorio/portao-a"),
+    chamarApi("/api/relatorio/portao-b"),
   ]);
 
   if (health.status !== 200) {
@@ -887,6 +953,7 @@ export default async function Painel({
   const ca = a1a.status === 200 ? (a1a.corpo as A1a) : null;
   const cb = a1b.status === 200 ? (a1b.corpo as A1b) : null;
   const pa = portaoA.status === 200 ? (portaoA.corpo as PortaoA) : null;
+  const pb = portaoB.status === 200 ? (portaoB.corpo as PortaoB) : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
 
@@ -2279,7 +2346,235 @@ export default async function Painel({
         </details>
       </Secao>
 
-      {/* =================================================== 05 · DECISAO */}
+      {/* =================================================== 05 · PORTAO B */}
+      <Secao id="portao-b">
+        {/* A RECUSA vem primeiro quando ela e o caso. R49: sem o A aprovado
+            INTEGRALMENTE, nao ha criterio nenhum a mostrar - nem parcial,
+            nem "so para ver". Um numero exibido e um numero que alguem le. */}
+        {!pb?.avaliado ? (
+          <div className="aviso" style={{ marginTop: 0 }}>
+            <p style={{ marginBottom: 6 }}>
+              <strong>O Portao B nao foi avaliado.</strong>
+            </p>
+            <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+              {pb?.por_que ??
+                "sem configuracao vigente nao ha o que avaliar"}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div
+              className={`aviso ${
+                pb.ha_candidata_digna_de_auditoria ? "warn" : ""
+              }`}
+              style={{ marginTop: 0 }}
+            >
+              <p style={{ marginBottom: 6 }}>
+                <strong>
+                  {pb.sem_candidata
+                    ? "Nenhuma candidata nesta config_version."
+                    : pb.ha_candidata_digna_de_auditoria
+                      ? `${(pb.passaram ?? []).length} candidata(s) digna(s) de auditoria.`
+                      : "Nenhuma candidata passou nos seis criterios."}
+                </strong>
+              </p>
+              <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                {pb.sem_candidata
+                  ? pb.por_que_sem_candidata
+                  : pb.auditoria ??
+                    "O Portao B nao aprova um edge: ele decide se existe" +
+                      " estrategia que mereca seguir para auditoria e forward."}
+              </p>
+            </div>
+
+            {/* A COMPARACAO POR CREDITO, que e o criterio 4 e vale para o
+                lote inteiro - §14.3 pergunta do braco, e nao da candidata. */}
+            {pb.por_credito ? (
+              <div className="tabela" style={{ marginTop: 14 }}>
+                <table>
+                  <caption>
+                    Criterio 4 — sobreviventes por credito consumido (§14.3)
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th>braco</th>
+                      <th className="num">sustentadas</th>
+                      <th className="num">creditos</th>
+                      <th className="num">por credito</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(["agente", "b4"] as const).map((br) => (
+                      <tr key={br}>
+                        <td>
+                          <strong>{br === "b4" ? "B4" : "agente"}</strong>
+                        </td>
+                        <td className="num">
+                          {pb.por_credito![br].sustentadas}
+                        </td>
+                        <td className="num">
+                          {pb.por_credito![br].creditos_consumidos}
+                        </td>
+                        <td className="num mono">
+                          {pb.por_credito![br].por_credito_ppm == null
+                            ? "—"
+                            : (
+                                pb.por_credito![br].por_credito_ppm! / 10000
+                              ).toFixed(2) + "%"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {pb.por_credito.por_que_sem_comparacao ? (
+                  <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                    {pb.por_credito.por_que_sem_comparacao}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Uma tabela por candidata: os seis criterios, e o resultado. */}
+            {(pb.candidatas ?? []).map((c) => (
+              <div className="card" style={{ marginTop: 14 }} key={c.hypothesis_id}>
+                <h3>
+                  Hipotese #{c.hypothesis_id}{" "}
+                  <span
+                    className={`pill ${
+                      c.resultado === "passou"
+                        ? "ok"
+                        : c.resultado === "rejeitado"
+                          ? "bad"
+                          : "warn"
+                    }`}
+                  >
+                    {c.resultado}
+                  </span>
+                </h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>criterio de §14.4</th>
+                      <th>resposta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(c.criterios).map(([nome, ok]) => (
+                      <tr key={nome}>
+                        <td>
+                          <code>{quebravel(nome)}</code>
+                        </td>
+                        <td>
+                          <span
+                            className={`pill ${
+                              ok === true ? "ok" : ok === false ? "bad" : "warn"
+                            }`}
+                          >
+                            {ok === true
+                              ? "sim"
+                              : ok === false
+                                ? "NAO"
+                                : "nao medido"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {c.walk_forward?.executado ? (
+                  <table>
+                    <caption>
+                      Walk-forward — {c.walk_forward.mantidas} de{" "}
+                      {c.walk_forward.quantas} janelas mantiveram, e o minimo e{" "}
+                      {c.walk_forward.minimo_de_janelas}
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th className="num">janela</th>
+                        <th className="num">barras</th>
+                        <th className="num">idas e voltas</th>
+                        <th className="num">observado</th>
+                        <th>manteve</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(c.walk_forward.janelas ?? []).map((j) => (
+                        <tr key={j.ordem}>
+                          <td className="num">{j.ordem}</td>
+                          <td className="num">
+                            {j.barras.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="num">{j.idas_e_voltas}</td>
+                          <td className="num">
+                            {j.observado == null ? (
+                              "—"
+                            ) : (
+                              <Dinheiro minor={j.observado} moeda="USD" />
+                            )}
+                          </td>
+                          <td>
+                            <span
+                              className={`pill ${
+                                j.manteve === true
+                                  ? "ok"
+                                  : j.manteve === false
+                                    ? "bad"
+                                    : "warn"
+                              }`}
+                            >
+                              {j.manteve === true
+                                ? "sim"
+                                : j.manteve === false
+                                  ? "nao"
+                                  : "nao observado"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="sub" style={{ fontSize: 12.5 }}>
+                    <strong>Walk-forward nao executado.</strong>{" "}
+                    {c.walk_forward?.por_que}
+                  </p>
+                )}
+              </div>
+            ))}
+
+            <div className="acoes" style={{ marginTop: 14 }}>
+              <form action={rodarPortaoB} className="linha">
+                <Botao pendente="rodando o walk-forward…">
+                  Rodar o walk-forward
+                </Botao>
+                <span className="sub" style={{ fontSize: 12 }}>
+                  nao gasta dinheiro — CPU e runs
+                </span>
+              </form>
+              <Resultado status={p.portaob} detalhe={p.detalhe} />
+            </div>
+          </>
+        )}
+
+        {pb?.o_que_aprovar_nao_significa ? (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>O que aprovar aqui NAO significa</h3>
+            <ul className="sub" style={{ fontSize: 12.5 }}>
+              {pb.o_que_aprovar_nao_significa.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <details>
+          <summary>json cru — portao B</summary>
+          <pre>{JSON.stringify(pb, null, 2)}</pre>
+        </details>
+      </Secao>
+
+      {/* =================================================== 06 · DECISAO */}
       <Secao id="decisao">
         <Tiles>
           <Tile

@@ -47,6 +47,10 @@ export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
   // segunda vem antes - "avaliado antes de qualquer resultado do agente ser
   // considerado".
   { assunto: "portao A: controles negativos, calibre e integridade (0B)", secao: "#portao-a" },
+  // O produto do incremento 14. Secao propria porque §14.4 separa os dois
+  // portoes: o A pergunta se o protocolo funciona, o B se existe candidata -
+  // e o segundo so e calculado se o primeiro passar (R49).
+  { assunto: "portao B e a auditoria de §14.4.1 (0B)", secao: "#portao-b" },
 ];
 
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
@@ -62,12 +66,15 @@ export const SECOES: { id: string; n: string; titulo: string; pergunta: string }
   // baixo por quem acabou de rodar algo, e o aviso no topo da 02 ja diz
   // quando o resultado nao vale.
   { id: "portao-a", n: "04", titulo: "Portao A", pergunta: "o protocolo rejeita defeito?" },
-  { id: "decisao", n: "05", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
-  { id: "execucao", n: "06", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
-  { id: "dinheiro", n: "07", titulo: "Dinheiro", pergunta: "as contas fecham?" },
-  { id: "ajustes", n: "08", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "fechamento", n: "09", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
-  { id: "substrato", n: "10", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  // So existe se o A passar - R49. A tela respeita a ordem: quem chega aqui
+  // com o A reprovado ve a recusa, e nao um numero parcial.
+  { id: "portao-b", n: "05", titulo: "Portao B", pergunta: "existe candidata digna de auditoria?" },
+  { id: "decisao", n: "06", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
+  { id: "execucao", n: "07", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
+  { id: "dinheiro", n: "08", titulo: "Dinheiro", pergunta: "as contas fecham?" },
+  { id: "ajustes", n: "09", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
+  { id: "fechamento", n: "10", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "11", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {
