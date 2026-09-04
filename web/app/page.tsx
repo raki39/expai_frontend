@@ -2072,6 +2072,68 @@ export default async function Painel({
               IC nunca chega a 10%. Ela reprovaria um BY correto por ele ser
               conservador.
             </p>
+
+            {/* O PODER, ao lado do FDR. §14.4: "ambos os numeros sao
+                registrados", e a frase esta na mesma linha em que o documento
+                explica por que: "um sistema que rejeita ruido perfeitamente
+                mas tambem rejeita efeitos verdadeiros implantados nao esta
+                calibrado, esta apenas surdo".
+
+                Ele existia no JSON e nao aparecia na tela - decima sexta vez
+                que um numero deste projeto mora onde ninguem le. */}
+            {(() => {
+              const pd = Object.values(cb.desenhos ?? {}).find(
+                (dz) => dz.promocao_do_lote?.poder,
+              )?.promocao_do_lote?.poder;
+              if (!pd) return null;
+              const linhas = [
+                ["piso testavel (§8.3, t = 2)", pd.piso_testavel],
+                ["detectavel por BY (t = 3,31)", pd.detectavel_por_by],
+              ] as const;
+              return (
+                <div className="tabela">
+                  <table>
+                    <caption>
+                      Poder — a outra metade que §14.4 manda registrar
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th>magnitude implantada</th>
+                        <th className="num">implantados</th>
+                        <th className="num">promovidos</th>
+                        <th className="num">fracao</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linhas.map(([rotulo, p]) => (
+                        <tr key={rotulo}>
+                          <td>{rotulo}</td>
+                          <td className="num">
+                            {p.implantados.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="num">
+                            {p.promovidos.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="num mono">
+                            {p.fracao_ppm == null
+                              ? "—"
+                              : `${(p.fracao_ppm / 10000).toFixed(2)}%`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
+                    Um sistema que rejeita ruido perfeitamente mas tambem
+                    rejeita efeitos verdadeiros implantados nao esta calibrado,
+                    esta apenas surdo (§14.4). E o poder medido aqui e{" "}
+                    <strong>limite superior</strong>: o horizonte usado e o
+                    in-sample inteiro, e uma hipotese real observa so as barras
+                    em que esteve com posicao aberta.
+                  </p>
+                </div>
+              );
+            })()}
             {(cb.divergencias ?? []).length ? (
               <div className="aviso bad">
                 <p style={{ margin: 0 }}>
