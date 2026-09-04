@@ -286,6 +286,109 @@ type B4 = {
   }[];
 };
 
+/** A1a: os seis controles negativos determinísticos (§14.4). */
+type A1a = {
+  existe: boolean;
+  quantas?: number;
+  promovidos?: number[];
+  familias?: {
+    chave: string;
+    familia_de_defeito: string;
+    o_que_injeta: string;
+    guarda_esperada: string;
+    tipo: string;
+  }[];
+  hipoteses?: {
+    hypothesis_id: number;
+    run_id: number;
+    chave: string;
+    familia_de_defeito: string | null;
+    tipo: string | null;
+    estado: string | null;
+    promovido: boolean;
+  }[];
+  creditos?: { orcamento: number; consumido: number; restante: number } | null;
+};
+
+/** A1b: o calibre acumulado das nulas estocásticas, nos dois desenhos. */
+type A1bDesenho = {
+  desenho: string;
+  execucoes: number;
+  execucoes_pedidas?: number;
+  completo?: boolean;
+  por_que_sem_numero?: string;
+  promocao_do_lote?: {
+    execucoes_com_promocao?: number;
+    intervalo: { ponto_ppm: number; baixo_ppm: number; alto_ppm: number };
+    limite_superior_ate_o_alvo: boolean;
+    /** A leitura ANTIGA da D29, mantida visível: apagá-la esconderia que
+     *  houve correção (D37). */
+    ic_contem_o_alvo?: boolean;
+    poder?: {
+      piso_testavel: { implantados: number; promovidos: number; fracao_ppm: number | null };
+      detectavel_por_by: { implantados: number; promovidos: number; fracao_ppm: number | null };
+    };
+  };
+  com_o_portao_de_amostra?: {
+    execucoes_com_promocao: number;
+    intervalo: { alto_ppm: number };
+  };
+};
+
+type A1b = {
+  existe: boolean;
+  gravadas?: number;
+  execucoes_pedidas_por_desenho?: number;
+  lote_por_execucao?: number;
+  divergencias?: string[];
+  horizonte_barras?: number;
+  magnitudes?: {
+    piso_testavel_milesimos: number;
+    detectavel_por_by_milesimos: number;
+    limiar_by_primeira_posicao_ppm: number;
+  };
+  desenhos?: Record<string, A1bDesenho>;
+};
+
+/** O relatório do Portão A. Três resultados, e `None` não é aprovado. */
+type PortaoA = {
+  existe: boolean;
+  passa?: boolean;
+  reprova?: boolean;
+  pendente?: boolean;
+  condicoes?: Record<string, boolean | null>;
+  reprovando?: string[];
+  pendentes?: string[];
+  se_reprova?: string;
+  portao_b?: { avaliado: boolean; por_que: string };
+  a2?: {
+    negativo: boolean | null;
+    proporcional_ao_giro: boolean | null;
+    por_que_sem_proporcional: string | null;
+    capital_semente_cents: number;
+    corridas: {
+      run_id: number;
+      operacoes_alvo: number;
+      p50: number;
+      perda_cents: number;
+      perda_por_ida_e_volta_cents: number | null;
+    }[];
+  };
+  a3?: {
+    conferencias: Record<string, boolean | null>;
+    execucoes_na_barra_da_decisao: number;
+    execucoes_em_conjunto_do_validador: number;
+    acessos_ao_holdout_por_outro: number;
+  };
+  a4?: {
+    conferencias: Record<string, boolean>;
+    hipoteses_na_tabela: number;
+    contador_global: number;
+    testadas_sem_estado: number[];
+  };
+  nao_responde?: string[];
+};
+
 type ConfigResposta = {
   version_id: number;
   config_hash: string;
@@ -614,6 +717,29 @@ async function rodarB4() {
   paraPainel(status, corpo, "b4");
 }
 
+async function rodarA1a() {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/a1a", {
+    method: "POST",
+    body: JSON.stringify({ author: "painel" }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "a1a");
+}
+
+async function rodarA1b(formData: FormData) {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const quantas = Number(formData.get("quantas") ?? 25);
+  const { status, corpo } = await chamarApi("/api/a1b", {
+    method: "POST",
+    body: JSON.stringify({ author: "painel", quantas }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "a1b");
+}
+
 async function provarReprodutibilidade() {
   "use server";
   if (!(await temSessao())) redirect("/login");
@@ -664,6 +790,8 @@ export default async function Painel({
     comparacao?: string;
     agente?: string;
     b4?: string;
+    a1a?: string;
+    a1b?: string;
     detalhe?: string;
   }>;
 }) {
@@ -673,7 +801,7 @@ export default async function Painel({
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
-    separacao, lote, creditos, b4,
+    separacao, lote, creditos, b4, a1a, a1b, portaoA,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -691,6 +819,9 @@ export default async function Painel({
     chamarApi("/api/validador/lote"),
     chamarApi("/api/validador/creditos"),
     chamarApi("/api/b4"),
+    chamarApi("/api/a1a"),
+    chamarApi("/api/a1b"),
+    chamarApi("/api/relatorio/portao-a"),
   ]);
 
   if (health.status !== 200) {
@@ -736,6 +867,9 @@ export default async function Painel({
   const lt = lote.status === 200 ? (lote.corpo as Lote) : null;
   const cr = creditos.status === 200 ? (creditos.corpo as Creditos) : null;
   const b = b4.status === 200 ? (b4.corpo as B4) : null;
+  const ca = a1a.status === 200 ? (a1a.corpo as A1a) : null;
+  const cb = a1b.status === 200 ? (a1b.corpo as A1b) : null;
+  const pa = portaoA.status === 200 ? (portaoA.corpo as PortaoA) : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
 
@@ -930,6 +1064,85 @@ export default async function Painel({
                 </span>
               </form>
               <Resultado status={p.b4} detalhe={p.detalhe} />
+            </div>
+          </Card>
+
+          {/* Os dois controles do PROTOCOLO. B4 controla o agente; estes
+              controlam quem julga — e §14.4 avalia o Portao A "antes de
+              qualquer resultado do agente ser considerado". */}
+          <Card titulo="5 · A1a (controles de defeito)">
+            <p className="sub" style={{ margin: "0 0 8px", fontSize: 12.5 }}>
+              Seis hipoteses <strong>construidas para revelar defeito</strong>,
+              uma por familia de §14.4, injetadas{" "}
+              <strong>pelo mesmo caminho das reais</strong>.{" "}
+              <strong>Tolerancia zero</strong>: uma unica promocao reprova a
+              fase.
+            </p>
+            <p style={{ margin: 0 }}>
+              {ca?.quantas ? (
+                (ca.promovidos ?? []).length ? (
+                  <span className="pill bad">
+                    {(ca.promovidos ?? []).length} promovido(s)
+                  </span>
+                ) : (
+                  <span className="pill ok">{ca.quantas} injetados</span>
+                )
+              ) : (
+                <span className="pill warn">nunca rodou</span>
+              )}
+            </p>
+            <div className="acoes">
+              <form action={rodarA1a} className="linha">
+                <Botao pendente="injetando os seis…">
+                  {ca?.quantas ? "Injetar de novo" : "Injetar os controles"}
+                </Botao>
+                <span className="sub" style={{ fontSize: 12 }}>
+                  nao gasta dinheiro — so CPU
+                </span>
+              </form>
+              <Resultado status={p.a1a} detalhe={p.detalhe} />
+            </div>
+          </Card>
+
+          <Card titulo="6 · A1b (calibre)">
+            <p className="sub" style={{ margin: "0 0 8px", fontSize: 12.5 }}>
+              Nulas estocasticas em execucoes repetidas, nos dois desenhos da
+              D29. Roda <strong>em pedacos</strong>: sao 400 execucoes a ~0,85 s
+              cada, e uma requisicao de seis minutos nao e desenho, e aposta no
+              timeout.
+            </p>
+            <p style={{ margin: 0 }}>
+              {cb?.gravadas ? (
+                <span
+                  className={`pill ${
+                    cb.gravadas >= 2 * (cb.execucoes_pedidas_por_desenho ?? 200)
+                      ? "ok"
+                      : "warn"
+                  }`}
+                >
+                  {cb.gravadas} de{" "}
+                  {2 * (cb.execucoes_pedidas_por_desenho ?? 200)} execucoes
+                </span>
+              ) : (
+                <span className="pill warn">nunca rodou</span>
+              )}
+            </p>
+            <div className="acoes">
+              <form action={rodarA1b} className="linha">
+                <label className="caixa">
+                  <input
+                    type="number"
+                    name="quantas"
+                    defaultValue={25}
+                    min={1}
+                    max={50}
+                    style={{ width: 64 }}
+                  />
+                  execucoes
+                </label>
+                <Botao pendente="calibrando…">Rodar um pedaco</Botao>
+              </form>
+              <Resultado status={p.a1b} detalhe={p.detalhe} />
             </div>
           </Card>
         </div>
@@ -1649,7 +1862,300 @@ export default async function Painel({
         </details>
       </Secao>
 
-      {/* =================================================== 04 · DECISAO */}
+      {/* =================================================== 04 · PORTAO A */}
+      <Secao id="portao-a">
+        {/* A RESPOSTA primeiro, e ela tem tres estados.
+            `pendente` nao e `passa`: o Portao A e "obrigatorio,
+            eliminatorio", e um criterio que ninguem mediu nao e um criterio
+            satisfeito. */}
+        <div
+          className={`aviso ${
+            pa?.reprova ? "bad" : pa?.passa ? "ok" : ""
+          }`}
+          style={{ marginTop: 0 }}
+        >
+          <p style={{ marginBottom: 6 }}>
+            <strong>
+              {!pa?.existe
+                ? "Sem configuracao para avaliar."
+                : pa.reprova
+                  ? "O Portao A REPROVA."
+                  : pa.passa
+                    ? "O Portao A passa."
+                    : "O Portao A esta PENDENTE."}
+            </strong>{" "}
+            {pa?.reprova ? (
+              <>Falhando: {(pa.reprovando ?? []).join(", ")}.</>
+            ) : pa?.pendente ? (
+              <>Ainda nao medido: {(pa.pendentes ?? []).join(", ")}.</>
+            ) : null}
+          </p>
+          {pa?.reprova ? (
+            <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+              {pa.se_reprova}
+            </p>
+          ) : null}
+        </div>
+
+        {pa?.condicoes ? (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>As condicoes, cada uma derivada de consulta</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>criterio</th>
+                  <th>resposta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(pa.condicoes).map(([nome, ok]) => (
+                  <tr key={nome}>
+                    <td>
+                      <code>{quebravel(nome)}</code>
+                    </td>
+                    <td>
+                      <span
+                        className={`pill ${
+                          ok === true ? "ok" : ok === false ? "bad" : "warn"
+                        }`}
+                      >
+                        {ok === true ? "sim" : ok === false ? "NAO" : "nao medido"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="sub" style={{ marginBottom: 0, fontSize: 12.5 }}>
+              <strong>nao medido</strong> nao e <strong>sim</strong>. No
+              relatorio da 0A um <code>None</code> era neutro, e ali estava
+              certo; aqui o portao e eliminatorio, e um criterio que ninguem
+              mediu nao e um criterio satisfeito.
+            </p>
+          </div>
+        ) : null}
+
+        {/* ------------------------------------------------ A1a */}
+        {ca?.quantas ? (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>A1a — os seis controles, e o que aconteceu com cada um</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>familia de defeito</th>
+                  <th>tipo</th>
+                  <th>estado</th>
+                  <th>promovido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(ca.hipoteses ?? []).map((hp) => (
+                  <tr key={hp.hypothesis_id}>
+                    <td>{hp.familia_de_defeito ?? hp.chave}</td>
+                    <td>
+                      <span className="pill neutro">{hp.tipo ?? "?"}</span>
+                    </td>
+                    <td>
+                      <code>{quebravel(hp.estado ?? "—")}</code>
+                    </td>
+                    <td>
+                      <span
+                        className={`pill ${hp.promovido ? "bad" : "ok"}`}
+                      >
+                        {hp.promovido ? "SIM — reprova" : "nao"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {/* ------------------------------------------------ A1b */}
+        {cb?.gravadas ? (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>A1b — o calibre, nos dois desenhos</h3>
+            {cb.magnitudes ? (
+              <p className="sub" style={{ marginTop: 0, fontSize: 12.5 }}>
+                As duas magnitudes de sinal implantado sao{" "}
+                <strong>derivadas</strong> e <strong>nao coincidem</strong>: o
+                piso testavel de §8.3 vale{" "}
+                <strong>
+                  {(cb.magnitudes.piso_testavel_milesimos / 1000).toFixed(3)}
+                </strong>{" "}
+                (calibrado em t = 2) e o que BY exige na primeira posicao vale{" "}
+                <strong>
+                  {(cb.magnitudes.detectavel_por_by_milesimos / 1000).toFixed(3)}
+                </strong>{" "}
+                (limiar de {cb.magnitudes.limiar_by_primeira_posicao_ppm} ppm).
+                O planejamento de amostra e a correcao de multiplicidade sao
+                reguas diferentes na mesma decisao.
+              </p>
+            ) : null}
+            <table>
+              <thead>
+                <tr>
+                  <th>desenho</th>
+                  <th className="num">execucoes</th>
+                  <th className="num">IC 95%</th>
+                  <th>criterio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.values(cb.desenhos ?? {}).map((dz) => (
+                  <tr key={dz.desenho}>
+                    <td>
+                      <code>{quebravel(dz.desenho)}</code>
+                    </td>
+                    <td className="num">
+                      {dz.execucoes} / {dz.execucoes_pedidas ?? "?"}
+                    </td>
+                    <td className="num mono">
+                      {dz.promocao_do_lote
+                        ? `${(dz.promocao_do_lote.intervalo.baixo_ppm / 10000).toFixed(2)}% – ${(dz.promocao_do_lote.intervalo.alto_ppm / 10000).toFixed(2)}%`
+                        : "—"}
+                    </td>
+                    <td>
+                      {!dz.completo ? (
+                        <span className="pill warn">incompleto</span>
+                      ) : dz.promocao_do_lote?.limite_superior_ate_o_alvo ? (
+                        <span className="pill ok">dentro do alvo</span>
+                      ) : (
+                        <span className="pill bad">acima do alvo</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="sub" style={{ fontSize: 12.5 }}>
+              O criterio e <strong>limite superior ≤ 10%</strong>, e nao &quot;o
+              IC contem 10%&quot; — D37 (ADR 0024). Sob BY a segunda leitura e
+              aritmeticamente inalcancavel: na nula global ele rejeita com
+              probabilidade no maximo <code>alfa / H(48)</code> = 2,24%, entao o
+              IC nunca chega a 10%. Ela reprovaria um BY correto por ele ser
+              conservador.
+            </p>
+            {(cb.divergencias ?? []).length ? (
+              <div className="aviso bad">
+                <p style={{ margin: 0 }}>
+                  {(cb.divergencias ?? []).join("; ")}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* ------------------------------------------------ A2 e A4 */}
+        {pa?.a2 ? (
+          <div className="duas" style={{ marginTop: 14 }}>
+            <Card titulo="A2 · o simulador e honesto?">
+              <p className="sub" style={{ marginTop: 0, fontSize: 12.5 }}>
+                Se operar ao acaso desse lucro, nada medido ali significaria
+                coisa alguma (§8.4.1.3). Na 0A isto era sanidade; §14.4 o torna{" "}
+                <strong>portao</strong>.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th className="num">giro</th>
+                    <th className="num">perda</th>
+                    <th className="num">por ida e volta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pa.a2.corridas.map((cr2) => (
+                    <tr key={cr2.run_id}>
+                      <td className="num">{cr2.operacoes_alvo}</td>
+                      <td className="num">
+                        <Dinheiro minor={cr2.perda_cents} moeda="USD" />
+                      </td>
+                      <td className="num mono">
+                        {cr2.perda_por_ida_e_volta_cents == null
+                          ? "—"
+                          : (cr2.perda_por_ida_e_volta_cents / 100).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pa.a2.por_que_sem_proporcional ? (
+                <p className="sub" style={{ marginBottom: 0, fontSize: 12.5 }}>
+                  {pa.a2.por_que_sem_proporcional}
+                </p>
+              ) : null}
+            </Card>
+
+            <Card titulo="A3 e A4 · vazamento e contabilidade">
+              <p className="sub" style={{ marginTop: 0, fontSize: 12.5 }}>
+                As mesmas perguntas que a suite faz, feitas ao{" "}
+                <strong>banco de producao</strong>: um teste verde numa maquina
+                nao diz nada sobre as linhas que existem aqui.
+              </p>
+              <table>
+                <tbody>
+                  {Object.entries({
+                    ...(pa.a3?.conferencias ?? {}),
+                    ...(pa.a4?.conferencias ?? {}),
+                  }).map(([nome, ok]) => (
+                    <tr key={nome}>
+                      <td>
+                        <code>{quebravel(nome)}</code>
+                      </td>
+                      <td>
+                        <span
+                          className={`pill ${
+                            ok === true ? "ok" : ok === false ? "bad" : "warn"
+                          }`}
+                        >
+                          {ok === true ? "ok" : ok === false ? "NAO" : "?"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pa.a4 ? (
+                <p className="sub" style={{ marginBottom: 0, fontSize: 12.5 }}>
+                  {pa.a4.hipoteses_na_tabela} hipoteses na tabela contra{" "}
+                  {pa.a4.contador_global} no contador global — conferido nos{" "}
+                  <strong>dois sentidos</strong>, porque so um deixaria o
+                  registro acumular linhas que nenhuma tentativa produziu.
+                </p>
+              ) : null}
+            </Card>
+          </div>
+        ) : null}
+
+        {pa?.portao_b ? (
+          <div className="aviso" style={{ marginTop: 14 }}>
+            <p style={{ margin: 0 }}>
+              <strong>Portao B: nao avaliado.</strong> {pa.portao_b.por_que}
+            </p>
+          </div>
+        ) : null}
+
+        {pa?.nao_responde ? (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>O que o Portao A nao responde</h3>
+            <ul className="sub" style={{ fontSize: 12.5 }}>
+              {pa.nao_responde.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <details>
+          <summary>json cru — portao A, a1a, a1b</summary>
+          <pre>
+            {JSON.stringify({ portao_a: pa, a1a: ca, a1b: cb }, null, 2)}
+          </pre>
+        </details>
+      </Secao>
+
+      {/* =================================================== 05 · DECISAO */}
       <Secao id="decisao">
         <Tiles>
           <Tile

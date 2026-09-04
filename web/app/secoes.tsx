@@ -41,6 +41,12 @@ export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
   // JSON e ler a mao - foi o que aconteceu nos tres primeiros runs da 0B.
   { assunto: "conhecimento: pre-registro, parecer, lote e creditos (0B)", secao: "#conhecimento" },
   { assunto: "separacao por finalidade (incremento 9)", secao: "#conhecimento" },
+  // O PRODUTO da 0B. Secao propria, e nao uma caixa dentro de #conhecimento:
+  // a 03 pergunta se o protocolo aceita UMA hipotese, e esta pergunta se o
+  // protocolo FUNCIONA. Sao perguntas de niveis diferentes, e §14.4 diz que a
+  // segunda vem antes - "avaliado antes de qualquer resultado do agente ser
+  // considerado".
+  { assunto: "portao A: controles negativos, calibre e integridade (0B)", secao: "#portao-a" },
 ];
 
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
@@ -50,12 +56,18 @@ export const SECOES: { id: string; n: string; titulo: string; pergunta: string }
   // resultado; o protocolo aceitar a hipotese e outra coisa - e §14.4 diz que
   // a fase e "primariamente um teste do validador".
   { id: "conhecimento", n: "03", titulo: "Conhecimento", pergunta: "o protocolo aceita essa hipotese?" },
-  { id: "decisao", n: "04", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
-  { id: "execucao", n: "05", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
-  { id: "dinheiro", n: "06", titulo: "Dinheiro", pergunta: "as contas fecham?" },
-  { id: "ajustes", n: "07", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "fechamento", n: "08", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
-  { id: "substrato", n: "09", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  // A pergunta que a 0B existe para responder. Ela vem DEPOIS da 03 na tela e
+  // ANTES dela na ordem logica - §14.4: "avaliado antes de qualquer resultado
+  // do agente ser considerado". Fica aqui porque a tela e lida de cima para
+  // baixo por quem acabou de rodar algo, e o aviso no topo da 02 ja diz
+  // quando o resultado nao vale.
+  { id: "portao-a", n: "04", titulo: "Portao A", pergunta: "o protocolo rejeita defeito?" },
+  { id: "decisao", n: "05", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
+  { id: "execucao", n: "06", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
+  { id: "dinheiro", n: "07", titulo: "Dinheiro", pergunta: "as contas fecham?" },
+  { id: "ajustes", n: "08", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
+  { id: "fechamento", n: "09", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "10", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {
