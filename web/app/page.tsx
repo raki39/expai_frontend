@@ -258,6 +258,12 @@ type Lote = {
 type Creditos = {
   por_braco?: {
     braco: string;
+    /** Orcamento e familia sao POR config_version. Sem esta coluna a tabela
+     *  mostrava tres linhas "agente" e duas "B4" sob o mesmo rotulo. */
+    config_version_id: number;
+    vigente: boolean;
+    hipoteses: number;
+    reflexoes: number;
     orcamento: number;
     consumido: number;
     restante: number;
@@ -1747,6 +1753,7 @@ export default async function Painel({
               <thead>
                 <tr>
                   <th>braco</th>
+                  <th className="num">config</th>
                   <th className="num">hipoteses</th>
                   <th className="num">creditos</th>
                   <th className="num">restante</th>
@@ -1754,8 +1761,17 @@ export default async function Painel({
                 </tr>
               </thead>
               <tbody>
+                {/* Uma linha por (braco, config_version), e a linha DIZ qual
+                    config e. Antes eram tres linhas "agente" e duas "B4" sob
+                    o mesmo rotulo, com `hipoteses` e `reflexoes` do braco
+                    VIGENTE em todas - numeros de um experimento ao lado do
+                    consumo de outro, embaixo de uma legenda afirmando que a
+                    comparacao exige a mesma config_version. */}
                 {cr.por_braco.map((br) => (
-                  <tr key={br.braco}>
+                  <tr
+                    key={`${br.braco}-${br.config_version_id}`}
+                    style={br.vigente ? undefined : { opacity: 0.55 }}
+                  >
                     <td>
                       <strong>{br.braco === "b4" ? "B4" : "agente"}</strong>
                       <span className="sub">
@@ -1765,15 +1781,20 @@ export default async function Painel({
                       </span>
                     </td>
                     <td className="num">
-                      {br.braco === "b4" ? (b?.quantas ?? 0) : "—"}
+                      {br.vigente ? (
+                        <span className="pill ok">v{br.config_version_id}</span>
+                      ) : (
+                        <span className="sub">v{br.config_version_id}</span>
+                      )}
                     </td>
+                    <td className="num">{br.hipoteses}</td>
                     <td className="num">{br.consumido}</td>
                     <td className="num sub">{br.restante}</td>
                     <td>
-                      {br.braco === "b4" ? (
+                      {br.reflexoes === 0 ? (
                         <span className="pill ok">zero</span>
                       ) : (
-                        <span className="sub">{ag.reflexoes ?? 0}</span>
+                        <span className="sub">{br.reflexoes}</span>
                       )}
                     </td>
                   </tr>
@@ -1783,7 +1804,10 @@ export default async function Painel({
             <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
               Sobreviventes por credito e o numero do Portao A (§14.4, criterio
               &quot;supera B4 por credito consumido&quot;), e ele exige que os
-              dois bracos tenham rodado sob a mesma <code>config_version</code>.
+              dois bracos tenham rodado sob a mesma <code>config_version</code>{" "}
+              — por isso a coluna existe, e as linhas de outras config estao
+              esmaecidas. Somar as linhas seria comparar experimentos
+              diferentes.
             </p>
           </div>
         ) : null}
