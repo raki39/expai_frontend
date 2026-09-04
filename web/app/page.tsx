@@ -424,6 +424,11 @@ type PortaoB = {
   por_credito?: {
     agente_supera_b4: boolean | null;
     por_que_sem_comparacao: string | null;
+    /** O criterio 4 sai `false` quando o agente perde E quando os dois
+     *  empatam, e as duas coisas levam a conclusoes opostas (§14.3). */
+    empate?: boolean;
+    ambos_zerados?: boolean;
+    o_que_o_empate_significa?: string | null;
     agente: { sustentadas: number; creditos_consumidos: number; por_credito_ppm: number | null };
     b4: { sustentadas: number; creditos_consumidos: number; por_credito_ppm: number | null };
   };
@@ -2445,6 +2450,18 @@ export default async function Painel({
                   <p className="sub" style={{ fontSize: 12, marginBottom: 0 }}>
                     {pb.por_credito.por_que_sem_comparacao}
                   </p>
+                ) : null}
+                {pb.por_credito.o_que_o_empate_significa ? (
+                  <div className="aviso warn" style={{ marginTop: 10 }}>
+                    <p style={{ margin: 0, fontSize: 12.5 }}>
+                      <strong>
+                        {pb.por_credito.ambos_zerados
+                          ? "Os dois bracos deram zero."
+                          : "Os dois bracos empataram."}
+                      </strong>{" "}
+                      {pb.por_credito.o_que_o_empate_significa}
+                    </p>
+                  </div>
                 ) : null}
               </div>
             ) : null}
