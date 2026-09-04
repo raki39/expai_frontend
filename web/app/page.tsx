@@ -421,6 +421,17 @@ type PortaoB = {
   ha_candidata_digna_de_auditoria?: boolean;
   auditoria?: string | null;
   o_que_aprovar_nao_significa?: string[];
+  /** A resposta da FASE, derivada dos dois portoes. §19.4 chama pelo nome o
+   *  desfecho de passar no A e falhar no B. */
+  resposta_da_0b?: {
+    pergunta_da_fase: string;
+    portao_a_passou: boolean;
+    portao_b_avaliado: boolean;
+    ha_candidata: boolean;
+    o_que_a_fase_respondeu: string;
+    e_o_que_isso_significa: string | null;
+    nao_respondeu: string[];
+  };
   por_credito?: {
     agente_supera_b4: boolean | null;
     por_que_sem_comparacao: string | null;
@@ -2618,6 +2629,29 @@ export default async function Painel({
             ) : null}
           </>
         )}
+
+        {/* A RESPOSTA DA FASE. Derivada dos dois portoes, e nunca digitada:
+            cada um deles ja e a conjuncao de condicoes que saem de consulta. */}
+        {pb?.resposta_da_0b ? (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>A resposta da Fase 0B</h3>
+            <p style={{ marginTop: 0 }}>
+              <strong>{pb.resposta_da_0b.pergunta_da_fase}</strong>{" "}
+              {pb.resposta_da_0b.o_que_a_fase_respondeu}
+            </p>
+            {pb.resposta_da_0b.e_o_que_isso_significa ? (
+              <p className="sub" style={{ fontSize: 12.5 }}>
+                {pb.resposta_da_0b.e_o_que_isso_significa}
+              </p>
+            ) : null}
+            <h3>O que a 0B NAO respondeu</h3>
+            <ul className="sub" style={{ fontSize: 12.5 }}>
+              {pb.resposta_da_0b.nao_respondeu.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {pb?.o_que_aprovar_nao_significa ? (
           <div className="card" style={{ marginTop: 14 }}>
