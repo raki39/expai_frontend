@@ -821,6 +821,20 @@ async function rodarPortaoB() {
   paraPainel(status, corpo, "portaob");
 }
 
+async function rodarAuditoria(formData: FormData) {
+  "use server";
+  if (!(await temSessao())) redirect("/login");
+  const { status, corpo } = await chamarApi("/api/relatorio/auditoria", {
+    method: "POST",
+    body: JSON.stringify({
+      author: "painel",
+      hypothesis_id: Number(formData.get("hypothesis_id")),
+    }),
+  });
+  revalidatePath("/");
+  paraPainel(status, corpo, "auditoria");
+}
+
 async function provarReprodutibilidade() {
   "use server";
   if (!(await temSessao())) redirect("/login");
@@ -872,6 +886,7 @@ export default async function Painel({
     agente?: string;
     b4?: string;
     portaob?: string;
+    auditoria?: string;
     a1a?: string;
     a1b?: string;
     detalhe?: string;
@@ -2554,6 +2569,36 @@ export default async function Painel({
               </form>
               <Resultado status={p.portaob} detalhe={p.detalhe} />
             </div>
+
+            {/* A AUDITORIA de §14.4.1, e ela so aparece quando ha candidata
+                aprovada - como o botao de reancorar so aparece quando ha
+                deriva. Um botao permanentemente inutil convida a clicar nele
+                para ver o que acontece, e o que acontece e abrir runs. */}
+            {(pb.passaram ?? []).length ? (
+              <div className="aviso warn" style={{ marginTop: 14 }}>
+                <p style={{ marginBottom: 8 }}>
+                  <strong>
+                    Passar no Portao B dispara AUDITORIA, e nao comemoracao.
+                  </strong>{" "}
+                  §14.4.1: a probabilidade de um bug produzir este sinal e maior
+                  que a de haver edge real em fidelidade 1–2, entao o resultado
+                  e tratado como <strong>suspeita de defeito ate prova em
+                  contrario</strong>.
+                </p>
+                {(pb.passaram ?? []).map((hid) => (
+                  <form action={rodarAuditoria} className="linha" key={hid}>
+                    <input type="hidden" name="hypothesis_id" value={hid} />
+                    <Botao pendente="auditando…">
+                      Auditar a hipotese #{hid}
+                    </Botao>
+                    <span className="sub" style={{ fontSize: 12 }}>
+                      semente trocada e custo dobrado — abre runs, sem dinheiro
+                    </span>
+                  </form>
+                ))}
+                <Resultado status={p.auditoria} detalhe={p.detalhe} />
+              </div>
+            ) : null}
           </>
         )}
 
