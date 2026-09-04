@@ -377,8 +377,19 @@ type PortaoA = {
   a3?: {
     conferencias: Record<string, boolean | null>;
     execucoes_na_barra_da_decisao: number;
+    /** NESTA familia. O global vem separado, porque os runs da 0A rodaram
+     *  sobre a janela inteira quando a divisao nem existia. */
     execucoes_em_conjunto_do_validador: number;
+    execucoes_em_conjunto_do_validador_global: number;
     acessos_ao_holdout_por_outro: number;
+    /** FATO, e nao criterio: o walk-forward sao 30% dos 56.064 que a 0A usou
+     *  inteiros, e aqueles resultados foram lidos. */
+    walk_forward_ja_visto?: {
+      execucoes: number;
+      runs: number;
+      o_que_isso_levanta: string;
+      por_config_version: { config_version_id: number; execucoes: number }[];
+    };
   };
   a4?: {
     conferencias: Record<string, boolean>;
@@ -2123,6 +2134,33 @@ export default async function Painel({
                   <strong>dois sentidos</strong>, porque so um deixaria o
                   registro acumular linhas que nenhuma tentativa produziu.
                 </p>
+              ) : null}
+
+              {/* O FATO que o portao NAO gateia, e que precisa ser lido.
+                  Um numero de milhares de execucoes sem atribuicao nao
+                  permite decidir nada - ele tanto pode ser o codigo de hoje
+                  vazando quanto os runs da 0A, que rodaram sobre a janela
+                  inteira quando a divisao por finalidade nem existia. */}
+              {pa.a3?.walk_forward_ja_visto &&
+              pa.a3.walk_forward_ja_visto.execucoes > 0 ? (
+                <div className="aviso warn" style={{ marginTop: 10 }}>
+                  <p style={{ marginBottom: 6 }}>
+                    <strong>
+                      O walk-forward ja foi executado —{" "}
+                      {pa.a3.walk_forward_ja_visto.execucoes.toLocaleString(
+                        "pt-BR",
+                      )}{" "}
+                      execucoes em{" "}
+                      {pa.a3.walk_forward_ja_visto.runs} run(s) de outras
+                      config_versions.
+                    </strong>
+                  </p>
+                  <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                    {pa.a3.walk_forward_ja_visto.o_que_isso_levanta} — nao
+                    reprova o portao, e nao esta gateado: transformar isto em
+                    criterio seria decidir sozinho o alcance de §8.5.1.
+                  </p>
+                </div>
               ) : null}
             </Card>
           </div>
