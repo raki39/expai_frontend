@@ -59,30 +59,106 @@ for (const id of secoes) {
     erros.push(`SECOES declara "${id}", mas <Secao id="${id}"> nao existe em page.tsx`);
 }
 
-// 4. A FAIXA de comentario de cada secao cita o numero certo.
+// 4. A FAIXA de comentario de cada secao cita o numero E O TITULO certos, e
+//    a correspondencia entre faixas e secoes e BIJETIVA.
 //
-//    Elas ficaram erradas desde o incremento 8 - `04 · EXECUCAO` sobre uma
-//    secao que virou a 09 - e ninguem viu, porque comentario nao quebra nada.
-//    E o padrao que este projeto conta vinte vezes: um valor descrevia algo,
-//    parou de descrever, e nada avisou. Agora avisa.
-//    A faixa e casada com a PRIMEIRA `<Secao>` que aparece depois dela: entre
-//    as duas pode haver um comentario explicativo, e exigir adjacencia faria a
+//    Historia desta guarda, porque ela e o caso mais claro do padrao que este
+//    projeto registra:
+//
+//    * incremento 8: as faixas ficaram erradas - `04 · EXECUCAO` sobre a secao
+//      que virou a 09 - e ninguem viu, porque comentario nao quebra nada;
+//    * incremento 20: os NUMEROS foram corrigidos e esta conferencia nasceu;
+//    * 2026-09-08: descobriu-se que a faixa `SUBSTRATO` estava 190 linhas
+//      ACIMA da secao dela, empilhada sobre a do `FECHAMENTO`. A secao
+//      `substrato` nao tinha faixa nenhuma.
+//
+//    **E esta guarda nao pegou**, por dois buracos de estrutura:
+//
+//    1. `faixas` era um `Map` por id de secao, e duas faixas seguidas resolvem
+//       para a MESMA `<Secao>` - a segunda sobrescrevia a primeira, e o numero
+//       da faixa perdida nunca era conferido;
+//    2. a secao sem faixa simplesmente nao aparecia no mapa, e o laco
+//       iterava o mapa - logo, ausencia era invisivel.
+//
+//    Corrigir o numero e nao a estrutura teria deixado o mesmo defeito voltar
+//    na proxima secao nova. Agora sao tres exigencias:
+//    toda secao tem EXATAMENTE uma faixa, o numero casa, e o TITULO casa.
+//
+//    A faixa continua casada com a PRIMEIRA `<Secao>` depois dela: entre as
+//    duas pode haver um comentario explicativo, e exigir adjacencia faria a
 //    guarda acusar justamente as secoes mais documentadas.
-const faixas = new Map();
+const faixasVistas = [];
 for (const m of pagina.matchAll(/\{\/\* =+ (\d+) · ([A-ZÇÃÕÉ ]+?) \*\/\}/g)) {
   const resto = pagina.slice(m.index + m[0].length);
   const alvo = resto.match(/<Secao id="([a-z-]+)"/);
-  if (alvo) faixas.set(alvo[1], m[1]);
+  faixasVistas.push({
+    n: m[1],
+    titulo: m[2].trim(),
+    secao: alvo ? alvo[1] : null,
+  });
 }
-const numeroDe = new Map(
-  [...corpoDe("SECOES").matchAll(/id:\s*"([^"]+)"\s*,\s*n:\s*"(\d+)"/g)]
-    .map((m) => [m[1], m[2]]),
-);
-if (faixas.size === 0) erros.push("a conferencia de faixas nao leu nada — guarda vazia");
-for (const [id, n] of faixas) {
-  const esperado = numeroDe.get(id);
-  if (esperado && esperado !== n)
-    erros.push(`a faixa da secao "${id}" diz ${n}, e SECOES diz ${esperado}`);
+
+const declaradas = [
+  ...corpoDe("SECOES").matchAll(
+    /id:\s*"([^"]+)"\s*,\s*n:\s*"(\d+)"\s*,\s*titulo:\s*"([^"]+)"/g,
+  ),
+].map((m) => ({ id: m[1], n: m[2], titulo: m[3] }));
+
+/** Sem acento e em maiuscula, que e a forma da faixa. */
+function comparavel(texto) {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+}
+
+if (faixasVistas.length === 0)
+  erros.push("a conferencia de faixas nao leu nada — guarda vazia");
+if (declaradas.length !== secoes.length)
+  erros.push(
+    `SECOES tem ${secoes.length} entradas e so ${declaradas.length} casaram` +
+      " com id+n+titulo: a forma da lista mudou e esta guarda ficou parcial",
+  );
+
+// 4a. Nenhuma faixa orfa, e nenhuma faixa apontando para o vazio.
+for (const f of faixasVistas) {
+  if (f.secao === null)
+    erros.push(`a faixa "${f.n} · ${f.titulo}" nao precede nenhuma <Secao>`);
+}
+
+// 4b. Bijecao: cada secao tem EXATAMENTE uma faixa. Duas faixas empilhadas
+//     resolvem para a mesma secao, e era assim que a orfa se escondia.
+const porSecao = new Map();
+for (const f of faixasVistas) {
+  if (f.secao === null) continue;
+  porSecao.set(f.secao, [...(porSecao.get(f.secao) ?? []), f]);
+}
+for (const { id, n, titulo } of declaradas) {
+  const minhas = porSecao.get(id) ?? [];
+  if (minhas.length === 0) {
+    erros.push(
+      `a secao "${id}" (${n} · ${titulo}) nao tem faixa de comentario:` +
+        " ou ela foi esquecida, ou esta acima da secao errada",
+    );
+    continue;
+  }
+  if (minhas.length > 1) {
+    erros.push(
+      `a secao "${id}" tem ${minhas.length} faixas empilhadas` +
+        ` (${minhas.map((f) => `${f.n} · ${f.titulo}`).join(", ")}):` +
+        " uma delas pertence a outra secao",
+    );
+    continue;
+  }
+  const f = minhas[0];
+  if (f.n !== n)
+    erros.push(`a faixa da secao "${id}" diz ${f.n}, e SECOES diz ${n}`);
+  if (comparavel(f.titulo) !== comparavel(titulo))
+    erros.push(
+      `a faixa da secao "${id}" diz "${f.titulo}", e SECOES diz "${titulo}":` +
+        " a faixa esta rotulando a secao errada",
+    );
 }
 
 console.log("Criterio 1 do incremento 6 — os nove blocos e onde cada um esta:");

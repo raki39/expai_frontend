@@ -61,6 +61,12 @@ export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
   // alarme nao comprova edge" - e o unico lugar da tela que impede a leitura
   // errada mais provavel de um forward sem alarme.
   { assunto: "monitoramento continuo: CUSUM, dois limiares e a ausencia de sujeito (0C)", secao: "#monitoramento" },
+  // O produto da D48 / ADR 0038. Secao propria porque a pergunta e propria e
+  // desconfortavel: nao "a candidata funcionou?", mas "este desenho
+  // CONSEGUE testar o que ele proprio declara como efeito minimo?". A
+  // resposta e nao, e uma conclusao sobre o que NAO da para medir e a que
+  // mais facilmente some de um painel.
+  { assunto: "viabilidade: capacidade experimental sob BY + potencia de 80% (0C)", secao: "#viabilidade" },
 ];
 
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
@@ -87,12 +93,18 @@ export const SECOES: { id: string; n: string; titulo: string; pergunta: string }
   // que entrou, esta diz se o que esta em uso continua funcionando. Na 0C nao
   // ha conhecimento em uso, e a secao declara isso em vez de ficar vazia.
   { id: "monitoramento", n: "07", titulo: "Monitoramento", pergunta: "o conhecimento em uso continua funcionando?" },
-  { id: "decisao", n: "08", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
-  { id: "execucao", n: "09", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
-  { id: "dinheiro", n: "10", titulo: "Dinheiro", pergunta: "as contas fecham?" },
-  { id: "ajustes", n: "11", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "fechamento", n: "12", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
-  { id: "substrato", n: "13", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  // A D48, e ela fecha o bloco das perguntas do protocolo. Vem depois do
+  // monitoramento porque e a pergunta que sobra quando as outras foram
+  // respondidas: se nada e testavel no horizonte, saber que o monitor
+  // funciona nao resolve. Na 0C a resposta e que o desenho NAO consegue
+  // testar o efeito minimo, e o numero fica ao lado da frase.
+  { id: "viabilidade", n: "08", titulo: "Viabilidade", pergunta: "este desenho consegue testar o efeito minimo?" },
+  { id: "decisao", n: "09", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
+  { id: "execucao", n: "10", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
+  { id: "dinheiro", n: "11", titulo: "Dinheiro", pergunta: "as contas fecham?" },
+  { id: "ajustes", n: "12", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
+  { id: "fechamento", n: "13", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "14", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {

@@ -465,6 +465,60 @@ type Quarentena = {
 };
 
 /**
+ * A capacidade experimental do desenho (D48, ADR 0038). Espelha
+ * `/api/relatorio/viabilidade`.
+ *
+ * Nenhum destes numeros e calculado aqui - a regra 19 e literal, "o frontend
+ * nao contem logica de negocio: nenhuma". Inclusive a conclusao: ela chega
+ * como texto E como booleano derivado, e a tela mostra os dois.
+ */
+type Viabilidade = {
+  disponivel: boolean;
+  motivo?: string | null;
+  conclusao: string | null;
+  conclusao_sustentada?: boolean;
+  insumos_medidos?: {
+    in_sample_barras: number;
+    retornos_medidos: number;
+    variancia_desvio_por_barra_bps: number;
+    dependencia_rho_ppm: number;
+    fator_dependencia_ppm: number;
+    capital_exposto_cents: number;
+  };
+  insumos_declarados?: {
+    procedimento: string;
+    familia_m: number;
+    fdr_alvo_bps: number;
+    potencia_ppm: number;
+    alfa_primeira_rejeicao_ppm: number;
+    t_exigido_micro: number;
+    t_secao_8_3_micro: number;
+  };
+  horizontes?: Array<{
+    horizonte: string;
+    barras: number;
+    n_efetivo_disponivel: number;
+    sharpe_anualizado_milesimos: number;
+    menor_efeito_detectavel_cents: number;
+  }>;
+  hipoteses?: Array<{
+    hypothesis_id: number;
+    agente_origem: string;
+    regua_com_que_nasceu?: string;
+    n_minimo_gravado?: number;
+    veredito: string | null;
+    n_bruto_necessario?: number;
+    n_bruto_disponivel?: number;
+    deficit_barras?: number;
+    n_minimo_efetivo_pelo_sharpe?: number | null;
+    motivo?: string | null;
+  }>;
+  opcoes_prospectivas?: Array<{ opcao: string; custo: string }>;
+  fora_de_cogitacao?: string[];
+  nenhuma_opcao_escolhida?: string;
+};
+
+/**
  * O monitoramento continuo (§8.8, ADR 0035). Espelha
  * `/api/relatorio/monitoramento`.
  *
@@ -1023,7 +1077,7 @@ export default async function Painel({
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
     separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB, quarentena,
-    monitoramento,
+    monitoramento, viabilidade,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -1047,6 +1101,7 @@ export default async function Painel({
     chamarApi("/api/relatorio/portao-b"),
     chamarApi("/api/relatorio/quarentena"),
     chamarApi("/api/relatorio/monitoramento"),
+    chamarApi("/api/relatorio/viabilidade"),
   ]);
 
   if (health.status !== 200) {
@@ -1101,6 +1156,10 @@ export default async function Painel({
   const mon =
     monitoramento.status === 200
       ? (monitoramento.corpo as Monitoramento)
+      : null;
+  const via =
+    viabilidade.status === 200
+      ? (viabilidade.corpo as Viabilidade)
       : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
@@ -3100,7 +3159,231 @@ export default async function Painel({
         )}
       </Secao>
 
-      {/* =================================================== 08 · DECISAO */}
+      {/* ================================================ 08 · VIABILIDADE */}
+      <Secao id="viabilidade">
+        {/* A CONCLUSAO vem primeiro, e ela e desconfortavel de proposito.
+
+            A D48 respondeu uma pergunta que este projeto nunca tinha feito: o
+            desenho consegue testar o que ele proprio declara como efeito
+            minimo? Nao consegue. E uma conclusao sobre o que NAO da para
+            medir e a que mais facilmente some de um painel - ninguem procura
+            por ela. */}
+        {!via?.disponivel ? (
+          <div className="aviso" style={{ marginTop: 0 }}>
+            <p style={{ margin: 0 }}>
+              <strong>Sem capacidade a calcular.</strong>{" "}
+              {via?.motivo ?? "Nao ha viabilidade a mostrar."}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="aviso" style={{ marginTop: 0 }}>
+              <p style={{ marginBottom: 6 }}>
+                <strong>{via.conclusao}</strong>
+              </p>
+              <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                Sustentada pelos numeros deste banco:{" "}
+                <Pill ok={via.conclusao_sustentada} sim="SIM" nao="nao" /> — a
+                frase e derivada, e nao digitada: se o horizonte crescer o
+                bastante, este campo vira nao sozinho.
+              </p>
+            </div>
+
+            <Tiles>
+              <Tile
+                rotulo="potencia-alvo"
+                contexto="decisao do usuario em 2026-09-08; obrigatoria e sem valor padrao"
+                destaque
+              >
+                {via.insumos_declarados
+                  ? `${(via.insumos_declarados.potencia_ppm / 10000).toFixed(0)}%`
+                  : "—"}
+              </Tile>
+              <Tile
+                rotulo="limiar da 1a rejeicao"
+                contexto={
+                  via.insumos_declarados
+                    ? `${via.insumos_declarados.procedimento}, familia ${via.insumos_declarados.familia_m}, FDR ${(via.insumos_declarados.fdr_alvo_bps / 100).toFixed(0)}%`
+                    : undefined
+                }
+              >
+                {via.insumos_declarados
+                  ? `${via.insumos_declarados.alfa_primeira_rejeicao_ppm} ppm`
+                  : "—"}
+              </Tile>
+              <Tile
+                rotulo="t exigido"
+                contexto={
+                  via.insumos_declarados
+                    ? `z_alfa + z_beta; a secao 8.3 pedia ${(via.insumos_declarados.t_secao_8_3_micro / 1000000).toFixed(2)}`
+                    : undefined
+                }
+                heroi
+              >
+                {via.insumos_declarados
+                  ? (via.insumos_declarados.t_exigido_micro / 1000000).toFixed(3)
+                  : "—"}
+              </Tile>
+            </Tiles>
+
+            {/* A pergunta INVERTIDA: nao "esta hipotese cabe?", e "o que
+                caberia?". Ela nao depende de nenhuma hipotese ja escrita, e e
+                por isso que sustenta uma decisao prospectiva. */}
+            <h3>O que cada horizonte consegue detectar</h3>
+            <p className="sub">
+              O Sharpe anualizado e o numero comparavel entre horizontes; o
+              efeito em centavos sobe com a janela porque e um total sobre ela.
+              O teto que o schema aceita declarar e 5,000.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>horizonte</th>
+                  <th className="num">barras</th>
+                  <th className="num">n efetivo</th>
+                  <th className="num">Sharpe minimo detectavel</th>
+                  <th className="num">menor efeito</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(via.horizontes ?? []).map((h) => (
+                  <tr key={h.horizonte}>
+                    <td>{h.horizonte.replace(/_/g, " ")}</td>
+                    <td className="num">{h.barras.toLocaleString("pt-BR")}</td>
+                    <td className="num">
+                      {h.n_efetivo_disponivel.toLocaleString("pt-BR")}
+                    </td>
+                    <td
+                      className={
+                        h.sharpe_anualizado_milesimos > 5000 ? "num bad" : "num"
+                      }
+                    >
+                      {(h.sharpe_anualizado_milesimos / 1000).toFixed(3)}
+                    </td>
+                    <td className="num">
+                      <Dinheiro
+                        minor={h.menor_efeito_detectavel_cents}
+                        moeda="USD"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* As hipoteses ja registradas, RELIDAS contra a regua nova. Nada
+                aqui altera linha nenhuma: a D48 nao e retroativa, e a coluna
+                da regua diz sob qual cada uma nasceu. */}
+            {(via.hipoteses ?? []).length > 0 ? (
+              <>
+                <h3>As hipoteses registradas, contra a regua da D48</h3>
+                <p className="sub">
+                  Leitura, nunca escrita. A D48 vale so para hipoteses futuras
+                  — a coluna regua diz sob qual cada linha nasceu, e nenhuma
+                  foi redimensionada.
+                </p>
+                <table>
+                  <thead>
+                    <tr>
+                      <th className="num">id</th>
+                      <th>origem</th>
+                      <th>regua</th>
+                      <th className="num">n minimo gravado</th>
+                      <th className="num">necessarias</th>
+                      <th className="num">disponiveis</th>
+                      <th className="num">deficit</th>
+                      <th>veredito</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(via.hipoteses ?? []).map((h) => (
+                      <tr key={h.hypothesis_id}>
+                        <td className="num">{h.hypothesis_id}</td>
+                        <td>{h.agente_origem}</td>
+                        <td>
+                          <span className="pill neutro">
+                            {(h.regua_com_que_nasceu ?? "?").replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="num">
+                          {h.n_minimo_gravado?.toLocaleString("pt-BR") ?? "—"}
+                        </td>
+                        <td className="num">
+                          {h.n_bruto_necessario?.toLocaleString("pt-BR") ?? "—"}
+                        </td>
+                        <td className="num">
+                          {h.n_bruto_disponivel?.toLocaleString("pt-BR") ?? "—"}
+                        </td>
+                        <td className="num bad">
+                          {h.deficit_barras?.toLocaleString("pt-BR") ?? "—"}
+                        </td>
+                        <td>
+                          {(h.veredito ?? "sem veredito").replace(/_/g, " ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+
+            {/* E as opcoes, com NENHUMA escolhida. Nao ha coluna de escolha:
+                escolher agora seria escolher olhando resultado ja produzido. */}
+            <h3>O que isto abre, e nada esta escolhido</h3>
+            <p className="sub">{via.nenhuma_opcao_escolhida}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>opcao prospectiva</th>
+                  <th>custo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(via.opcoes_prospectivas ?? []).map((o) => (
+                  <tr key={o.opcao}>
+                    <td>{o.opcao}</td>
+                    <td className="sub">{o.custo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="aviso" style={{ marginTop: 12 }}>
+              <p style={{ marginBottom: 6 }}>
+                <strong>Fora de cogitacao</strong>{" "}
+                <span className="sub">— o perigo, nomeado pelo usuario</span>
+              </p>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {(via.fora_de_cogitacao ?? []).map((f) => (
+                  <li key={f} className="sub" style={{ fontSize: 12.5 }}>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {via.insumos_medidos ? (
+              <p className="sub" style={{ marginTop: 12 }}>
+                <strong>Medido, e nao suposto:</strong> desvio de{" "}
+                {via.insumos_medidos.variancia_desvio_por_barra_bps} bps por
+                barra e autocorrelacao de{" "}
+                {(via.insumos_medidos.dependencia_rho_ppm / 10000).toFixed(2)}%
+                sobre{" "}
+                {via.insumos_medidos.retornos_medidos.toLocaleString("pt-BR")}{" "}
+                retornos do in-sample. O fator de dependencia converte
+                observacoes efetivas em barras brutas.
+              </p>
+            ) : null}
+
+            <details>
+              <summary>json cru — viabilidade</summary>
+              <pre>{JSON.stringify(via, null, 2)}</pre>
+            </details>
+          </>
+        )}
+      </Secao>
+
+      {/* =================================================== 09 · DECISAO */}
       <Secao id="decisao">
         <Tiles>
           <Tile
@@ -3311,7 +3594,7 @@ export default async function Painel({
         )}
       </Secao>
 
-      {/* ================================================== 09 · EXECUCAO */}
+      {/* ================================================== 10 · EXECUCAO */}
       <Secao id="execucao">
         <Tiles>
           <Tile rotulo="Idas e voltas" contexto="uma compra e a venda que a fecha">
@@ -3462,7 +3745,7 @@ export default async function Painel({
         </div>
       </Secao>
 
-      {/* ================================================== 10 · DINHEIRO */}
+      {/* ================================================== 11 · DINHEIRO */}
       <Secao id="dinheiro">
         {l?.escopo === "livro_inteiro" ? (
           <div className="aviso warn" style={{ marginTop: 0 }}>
@@ -3614,7 +3897,7 @@ export default async function Painel({
         </div>
       </Secao>
 
-      {/* =============================================== 11 · CONFIGURACAO */}
+      {/* =============================================== 12 · CONFIGURACAO */}
       <Secao id="ajustes">
         {h.config_hash_confere === false ? (
           <div className="aviso bad" style={{ marginTop: 0 }}>
@@ -3780,8 +4063,7 @@ export default async function Painel({
         </Card>
       </Secao>
 
-      {/* ================================================= 13 · SUBSTRATO */}
-      {/* ================================================ 12 · FECHAMENTO */}
+      {/* ================================================ 13 · FECHAMENTO */}
       <Secao id="fechamento">
         {/* O relatorio da 0A. Nenhum numero e calculado aqui: a resposta
             inteira vem de /api/relatorio, onde ela e DERIVADA de doze
@@ -3971,6 +4253,7 @@ export default async function Painel({
         )}
       </Secao>
 
+      {/* ================================================= 14 · SUBSTRATO */}
       <Secao id="substrato">
         <div className="duas">
           <Card titulo="Credenciais e volume">
