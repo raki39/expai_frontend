@@ -51,6 +51,11 @@ export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
   // portoes: o A pergunta se o protocolo funciona, o B se existe candidata -
   // e o segundo so e calculado se o primeiro passar (R49).
   { assunto: "portao B e a auditoria de §14.4.1 (0B)", secao: "#portao-b" },
+  // O produto da D38 / ADR 0034, e a razao de ela existir e de RELATO: uma
+  // ausencia que ninguem declara vira silencio, e silencio e lido como
+  // esquecimento. Quem abrir isto em 2027 tem de ver que nao houve candidata
+  // DE PROPOSITO.
+  { assunto: "quarentena: nenhuma candidata, e o motivo de cada exclusao (0C)", secao: "#quarentena" },
 ];
 
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
@@ -69,12 +74,16 @@ export const SECOES: { id: string; n: string; titulo: string; pergunta: string }
   // So existe se o A passar - R49. A tela respeita a ordem: quem chega aqui
   // com o A reprovado ve a recusa, e nao um numero parcial.
   { id: "portao-b", n: "05", titulo: "Portao B", pergunta: "existe candidata digna de auditoria?" },
-  { id: "decisao", n: "06", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
-  { id: "execucao", n: "07", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
-  { id: "dinheiro", n: "08", titulo: "Dinheiro", pergunta: "as contas fecham?" },
-  { id: "ajustes", n: "09", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "fechamento", n: "10", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
-  { id: "substrato", n: "11", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  // Vem DEPOIS do Portao B porque e a pergunta seguinte: o B decide se existe
+  // candidata digna de auditoria, e esta diz o que de fato entrou no forward.
+  // Na 0C a resposta e "nada", e ela e declarada e nao omitida.
+  { id: "quarentena", n: "06", titulo: "Quarentena", pergunta: "o que entrou no forward, e por que nao entrou mais nada?" },
+  { id: "decisao", n: "07", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
+  { id: "execucao", n: "08", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
+  { id: "dinheiro", n: "09", titulo: "Dinheiro", pergunta: "as contas fecham?" },
+  { id: "ajustes", n: "10", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
+  { id: "fechamento", n: "11", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "12", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {

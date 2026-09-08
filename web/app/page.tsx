@@ -408,6 +408,62 @@ type PortaoA = {
 
 /** O Portao B. `avaliado: false` quando o A nao passou (R49) - e ai o corpo
  *  NAO traz criterio nenhum, nem parcial. */
+/**
+ * A quarentena do forward (ADR 0034). O tipo espelha `/api/relatorio/quarentena`.
+ *
+ * `nenhuma_candidata_admitida` e DERIVADO de consulta do lado da api - o
+ * frontend nao calcula nada (regra 19). Ele so nao pode deixar a declaracao
+ * passar em silencio.
+ */
+type AbordagemRejeitada = {
+  assinatura: string;
+  familia: string;
+  motivo: string;
+  bloqueia_variacao_parametrica: boolean;
+  bloqueia_variacao_textual: boolean;
+  bloqueia_troca_de_timeframe: boolean;
+  volta_legitima: string;
+};
+
+type Quarentena = {
+  existe?: boolean;
+  nenhuma_candidata_admitida: boolean;
+  candidatas_admitidas: number;
+  decisao: string;
+  por_que: string;
+  abordagens_rejeitadas: AbordagemRejeitada[];
+  b3: {
+    papel: string;
+    tem_pre_registro: boolean;
+    consome_credito: boolean;
+    entra_em_familia: boolean;
+    conta_no_dsr: boolean;
+    pode_ser_promovido: boolean;
+    por_que: string;
+    fronteira: string;
+  };
+  limiares_congelados: {
+    periodo_minimo_barras: number;
+    regimes_minimos: number;
+    magnitude_minima_ppm: number;
+    reserva_maxima_barras: number;
+    podem_ser_reduzidos: boolean;
+  } | null;
+  limiares_estao_congelados: boolean;
+  in_sample_congelado: Record<string, unknown>[];
+  conferencia_do_congelado: {
+    hypothesis_id: number;
+    confere: boolean;
+    erro: string | null;
+  }[];
+  requisitos_de_saida: string[];
+  veredito: {
+    resultado: string;
+    motivo: string;
+    requisitos: Record<string, boolean | null>;
+  } | null;
+};
+
 type PortaoB = {
   existe?: boolean;
   avaliado: boolean;
@@ -914,7 +970,7 @@ export default async function Painel({
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
-    separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB,
+    separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB, quarentena,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -936,6 +992,7 @@ export default async function Painel({
     chamarApi("/api/a1b"),
     chamarApi("/api/relatorio/portao-a"),
     chamarApi("/api/relatorio/portao-b"),
+    chamarApi("/api/relatorio/quarentena"),
   ]);
 
   if (health.status !== 200) {
@@ -985,6 +1042,8 @@ export default async function Painel({
   const cb = a1b.status === 200 ? (a1b.corpo as A1b) : null;
   const pa = portaoA.status === 200 ? (portaoA.corpo as PortaoA) : null;
   const pb = portaoB.status === 200 ? (portaoB.corpo as PortaoB) : null;
+  const qt =
+    quarentena.status === 200 ? (quarentena.corpo as Quarentena) : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
 
@@ -2670,7 +2729,185 @@ export default async function Painel({
         </details>
       </Secao>
 
-      {/* =================================================== 06 · DECISAO */}
+      {/* ================================================ 06 · QUARENTENA */}
+      <Secao id="quarentena">
+        {/* A DECLARACAO vem primeiro, e ela e o ponto da secao.
+
+            A garantia 5 do ADR 0034 e sobre RELATO, e nao sobre metodo: uma
+            ausencia que ninguem declara vira silencio, e silencio e lido como
+            esquecimento. Quem abrir isto em 2027 tem de ver que nao houve
+            candidata DE PROPOSITO.
+
+            E `nenhuma_candidata_admitida` e DERIVADO de consulta. Se fosse
+            frase, sobreviveria intacta ao dia em que uma candidata entrasse. */}
+        {!qt?.existe ? (
+          <div className="aviso" style={{ marginTop: 0 }}>
+            <p style={{ margin: 0 }}>
+              <strong>Sem configuracao vigente.</strong> Nao ha quarentena a
+              mostrar.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="aviso" style={{ marginTop: 0 }}>
+              <p style={{ marginBottom: 6 }}>
+                <strong>
+                  {qt.nenhuma_candidata_admitida
+                    ? "Nenhuma candidata admitida no forward."
+                    : `${qt.candidatas_admitidas} candidata(s) admitida(s).`}
+                </strong>{" "}
+                <span className="sub">{qt.decisao}</span>
+              </p>
+              <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                {qt.por_que}
+              </p>
+            </div>
+
+            <Tiles>
+              <Tile rotulo="candidatas admitidas" contexto="derivado de consulta, nunca digitado">
+                {String(qt.candidatas_admitidas)}
+              </Tile>
+              <Tile rotulo="abordagens rejeitadas" contexto="bloqueiam variacao parametrica, textual e de timeframe">
+                {String(qt.abordagens_rejeitadas.length)}
+              </Tile>
+              <Tile
+                rotulo="limiares congelados"
+                contexto={
+                  qt.limiares_estao_congelados
+                    ? "nao podem ser reduzidos"
+                    : "congele antes do primeiro tick"
+                }
+              >
+                {qt.limiares_estao_congelados ? "sim" : "NAO"}
+              </Tile>
+            </Tiles>
+
+            {/* O B3, e o que ele NAO e. Cada linha e um booleano do banco -
+                nao uma promessa de prosa. */}
+            <h3>O B3 neste forward</h3>
+            <p className="sub" style={{ marginTop: 0 }}>
+              {qt.b3.papel}. {qt.b3.por_que}
+            </p>
+            <table>
+              <tbody>
+                <tr>
+                  <td>tem pre-registro</td>
+                  <td>
+                    <Pill ok={!qt.b3.tem_pre_registro} sim="nao" nao="SIM" />
+                  </td>
+                </tr>
+                <tr>
+                  <td>consome credito</td>
+                  <td>
+                    <Pill ok={!qt.b3.consome_credito} sim="nao" nao="SIM" />
+                  </td>
+                </tr>
+                <tr>
+                  <td>entra em familia estatistica</td>
+                  <td>
+                    <Pill ok={!qt.b3.entra_em_familia} sim="nao" nao="SIM" />
+                  </td>
+                </tr>
+                <tr>
+                  <td>conta no DSR</td>
+                  <td>
+                    <Pill ok={!qt.b3.conta_no_dsr} sim="nao" nao="SIM" />
+                  </td>
+                </tr>
+                <tr>
+                  <td>pode ser promovido</td>
+                  <td>
+                    <Pill ok={!qt.b3.pode_ser_promovido} sim="nao" nao="SIM" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="sub" style={{ fontSize: 12.5 }}>
+              A fronteira e {qt.b3.fronteira}.
+            </p>
+
+            {/* O MOTIVO DE CADA EXCLUSAO. Sem isto, "nenhuma candidata"
+                pareceria falta de tentativa. */}
+            <h3>Abordagens descartadas, e por que</h3>
+            {qt.abordagens_rejeitadas.length === 0 ? (
+              <p className="sub">
+                Nenhuma abordagem registrada como rejeitada nesta base.
+              </p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>assinatura estrutural</th>
+                    <th>motivo</th>
+                    <th>volta legitima</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {qt.abordagens_rejeitadas.map((a: AbordagemRejeitada) => (
+                    <tr key={a.assinatura}>
+                      <td>
+                        <code style={{ fontSize: 11.5 }}>{a.assinatura}</code>
+                      </td>
+                      <td>{a.motivo}</td>
+                      <td className="sub">{a.volta_legitima}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p className="sub" style={{ fontSize: 12.5 }}>
+              A assinatura e o <strong>mecanismo</strong>, sem os numeros: 50/200
+              e 50/210 sao a mesma abordagem, e reescrever o enunciado tambem
+              nao muda nada. Trocar o <strong>timeframe</strong> cria hipotese
+              nova e <strong>nao</strong> abordagem nova - entao a rejeitada nao
+              entra trocando so a grade.
+            </p>
+
+            {qt.limiares_congelados ? (
+              <>
+                <h3>Limiares congelados</h3>
+                <table>
+                  <tbody>
+                    <tr>
+                      <td>periodo minimo (barras)</td>
+                      <td>{qt.limiares_congelados.periodo_minimo_barras}</td>
+                    </tr>
+                    <tr>
+                      <td>regimes distintos minimos</td>
+                      <td>{qt.limiares_congelados.regimes_minimos}</td>
+                    </tr>
+                    <tr>
+                      <td>magnitude minima (ppm do in-sample)</td>
+                      <td>{qt.limiares_congelados.magnitude_minima_ppm}</td>
+                    </tr>
+                    <tr>
+                      <td>reserva maxima (barras)</td>
+                      <td>{qt.limiares_congelados.reserva_maxima_barras}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+
+            {qt.veredito ? (
+              <>
+                <h3>Veredito</h3>
+                <p>
+                  <Pill ok={false} sim="nao" nao="SIM" />{" "}
+                  <span className="sub">{qt.veredito.motivo}</span>
+                </p>
+              </>
+            ) : null}
+
+            <details>
+              <summary>json cru — quarentena</summary>
+              <pre>{JSON.stringify(qt, null, 2)}</pre>
+            </details>
+          </>
+        )}
+      </Secao>
+
+      {/* =================================================== 07 · DECISAO */}
       <Secao id="decisao">
         <Tiles>
           <Tile
