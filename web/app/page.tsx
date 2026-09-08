@@ -471,6 +471,10 @@ type Quarentena = {
  * relatorio provisorio cujo rotulo aparece no fim e um relatorio que sera
  * citado como definitivo.
  */
+function via_desfecho(f: Fase0C | null): boolean {
+  return Boolean(f?.desfecho_antecipado?.sobre_edge);
+}
+
 type Fase0C = {
   fase: string;
   pergunta: string;
@@ -481,6 +485,18 @@ type Fase0C = {
     { cumprido: boolean; por_que_bloqueia: string | null }
   >;
   pendentes?: string[];
+  gates_que_seguram_a_resposta?: Array<{
+    gate: string;
+    por_que_bloqueia: string | null;
+  }>;
+  desfecho_antecipado?: {
+    sobre_edge: string | null;
+    candidatas_admitidas_no_forward: number;
+    por_que: string;
+    e_isto_e_o_desfecho_previsto: string;
+    nao_depende_de_gate_nem_de_decisao: string;
+  };
+  integridade?: Record<string, unknown>;
   resposta_da_0c: string | null;
   por_que_sem_resposta: string | null;
   nao_responde?: string[];
@@ -510,7 +526,8 @@ type Viabilidade = {
     variancia_desvio_por_barra_bps: number;
     dependencia_rho_ppm: number;
     fator_dependencia_ppm: number;
-    capital_exposto_cents: number;
+    base_de_normalizacao_cents: number;
+    o_que_a_base_e: string;
   };
   insumos_declarados?: {
     procedimento: string;
@@ -640,6 +657,8 @@ type PortaoB = {
     by_rejeitou: boolean;
     dsr_passou: boolean;
     amostra_suficiente: boolean;
+    falhas_adicionais: string[];
+    outro_criterio_reprovado: boolean;
     portao_b: string;
     dsr_decidiria_sozinho: boolean;
     leitura_se_o_dsr_decidisse: string | null;
@@ -2924,6 +2943,7 @@ export default async function Painel({
                     <th className="num">BY</th>
                     <th className="num">DSR</th>
                     <th className="num">amostra</th>
+                    <th>outro criterio reprovado</th>
                     <th>portao B</th>
                     <th>resultado</th>
                   </tr>
@@ -2940,6 +2960,20 @@ export default async function Painel({
                       </td>
                       <td className="num">
                         <Pill ok={l.amostra_suficiente} sim="ok" nao="X" />
+                      </td>
+                      {/* A coluna que separa `dsr_falhou_sozinho` de
+                          `dsr_falhou_com_companhia`. Sem ela as duas
+                          linhas eram VISUALMENTE IDENTICAS com resultados
+                          diferentes — estado escondido, e o leitor conclui
+                          que a regra e arbitraria. E ela nomeia QUAL
+                          criterio: um booleano generico continuaria
+                          escondendo metade. */}
+                      <td className="sub">
+                        {l.falhas_adicionais.length === 0
+                          ? "nenhum"
+                          : l.falhas_adicionais
+                              .map((f) => f.replace(/_/g, " "))
+                              .join(", ")}
                       </td>
                       <td className="sub">{l.portao_b}</td>
                       <td>
@@ -3602,6 +3636,15 @@ export default async function Painel({
                 observacoes efetivas em barras brutas.
               </p>
             ) : null}
+            {/* E a base, dita pelo que ela E. O campo se chamava
+                `capital_exposto` e o nome mentia: a exposicao real varia
+                barra a barra. */}
+            {via.insumos_medidos?.o_que_a_base_e ? (
+              <p className="sub">
+                <strong>A base de normalizacao:</strong>{" "}
+                {via.insumos_medidos.o_que_a_base_e}
+              </p>
+            ) : null}
 
             <details>
               <summary>json cru — viabilidade</summary>
@@ -3685,9 +3728,15 @@ export default async function Painel({
               >
                 {f0c.resposta_da_0c ?? "aguardando"}
               </Tile>
+              {/* Os gates NOMINAIS, e nao so a contagem: "2 gates abertos"
+                  manda procurar quais. */}
               <Tile
-                rotulo="gates pendentes"
-                contexto={(f0c.pendentes ?? []).join(" · ") || "nenhum"}
+                rotulo="gates que seguram a resposta"
+                contexto={
+                  (f0c.gates_que_seguram_a_resposta ?? [])
+                    .map((g) => g.gate.replace(/_/g, " "))
+                    .join(" · ") || "nenhum"
+                }
               >
                 {String((f0c.pendentes ?? []).length)}
               </Tile>
@@ -3698,6 +3747,32 @@ export default async function Painel({
                 {f0c.decisao_de_capacidade?.escolhida ?? "nao tomada"}
               </Tile>
             </Tiles>
+
+            {/* O DESFECHO que a fase ja pode antecipar, e ele nao espera
+                gate nem decisao. A D38 decidiu que nenhuma candidata entra, e
+                isso e fato do banco.
+
+                Sem este bloco, a tela leria "resposta: aguardando" e daria a
+                impressao de que a 0C nao tem nada a dizer — quando ela ja tem
+                a resposta sobre EDGE, e o que falta e sobre o SIMULADOR. */}
+            {via_desfecho(f0c) ? (
+              <div className="aviso" style={{ marginTop: 12 }}>
+                <p style={{ marginBottom: 6 }}>
+                  <strong>
+                    Desfecho sobre edge: {f0c.desfecho_antecipado!.sobre_edge}
+                  </strong>{" "}
+                  <span className="sub">
+                    — nao espera gate nem decisao de capacidade
+                  </span>
+                </p>
+                <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                  {f0c.desfecho_antecipado!.por_que}
+                </p>
+                <p className="sub" style={{ marginBottom: 0, fontSize: 12.5 }}>
+                  {f0c.desfecho_antecipado!.nao_depende_de_gate_nem_de_decisao}
+                </p>
+              </div>
+            ) : null}
 
             <h3>O que a 0C NAO responde</h3>
             <ul className="sub" style={{ fontSize: 12.5 }}>
