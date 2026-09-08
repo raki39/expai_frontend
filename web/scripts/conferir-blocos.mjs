@@ -59,6 +59,32 @@ for (const id of secoes) {
     erros.push(`SECOES declara "${id}", mas <Secao id="${id}"> nao existe em page.tsx`);
 }
 
+// 4. A FAIXA de comentario de cada secao cita o numero certo.
+//
+//    Elas ficaram erradas desde o incremento 8 - `04 · EXECUCAO` sobre uma
+//    secao que virou a 09 - e ninguem viu, porque comentario nao quebra nada.
+//    E o padrao que este projeto conta vinte vezes: um valor descrevia algo,
+//    parou de descrever, e nada avisou. Agora avisa.
+//    A faixa e casada com a PRIMEIRA `<Secao>` que aparece depois dela: entre
+//    as duas pode haver um comentario explicativo, e exigir adjacencia faria a
+//    guarda acusar justamente as secoes mais documentadas.
+const faixas = new Map();
+for (const m of pagina.matchAll(/\{\/\* =+ (\d+) · ([A-ZÇÃÕÉ ]+?) \*\/\}/g)) {
+  const resto = pagina.slice(m.index + m[0].length);
+  const alvo = resto.match(/<Secao id="([a-z-]+)"/);
+  if (alvo) faixas.set(alvo[1], m[1]);
+}
+const numeroDe = new Map(
+  [...corpoDe("SECOES").matchAll(/id:\s*"([^"]+)"\s*,\s*n:\s*"(\d+)"/g)]
+    .map((m) => [m[1], m[2]]),
+);
+if (faixas.size === 0) erros.push("a conferencia de faixas nao leu nada — guarda vazia");
+for (const [id, n] of faixas) {
+  const esperado = numeroDe.get(id);
+  if (esperado && esperado !== n)
+    erros.push(`a faixa da secao "${id}" diz ${n}, e SECOES diz ${esperado}`);
+}
+
 console.log("Criterio 1 do incremento 6 — os nove blocos e onde cada um esta:");
 for (const { bloco, secao } of blocos) console.log(`  · ${bloco.padEnd(32)} -> ${secao}`);
 

@@ -56,6 +56,11 @@ export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
   // esquecimento. Quem abrir isto em 2027 tem de ver que nao houve candidata
   // DE PROPOSITO.
   { assunto: "quarentena: nenhuma candidata, e o motivo de cada exclusao (0C)", secao: "#quarentena" },
+  // O produto do incremento 20 / ADR 0035. Secao propria pelo mesmo motivo da
+  // quarentena, e por um a mais: o campo que ela publica sempre - "ausencia de
+  // alarme nao comprova edge" - e o unico lugar da tela que impede a leitura
+  // errada mais provavel de um forward sem alarme.
+  { assunto: "monitoramento continuo: CUSUM, dois limiares e a ausencia de sujeito (0C)", secao: "#monitoramento" },
 ];
 
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
@@ -78,12 +83,16 @@ export const SECOES: { id: string; n: string; titulo: string; pergunta: string }
   // candidata digna de auditoria, e esta diz o que de fato entrou no forward.
   // Na 0C a resposta e "nada", e ela e declarada e nao omitida.
   { id: "quarentena", n: "06", titulo: "Quarentena", pergunta: "o que entrou no forward, e por que nao entrou mais nada?" },
-  { id: "decisao", n: "07", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
-  { id: "execucao", n: "08", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
-  { id: "dinheiro", n: "09", titulo: "Dinheiro", pergunta: "as contas fecham?" },
-  { id: "ajustes", n: "10", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "fechamento", n: "11", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
-  { id: "substrato", n: "12", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  // §8.8. Vem depois da quarentena porque e a pergunta seguinte: aquela diz o
+  // que entrou, esta diz se o que esta em uso continua funcionando. Na 0C nao
+  // ha conhecimento em uso, e a secao declara isso em vez de ficar vazia.
+  { id: "monitoramento", n: "07", titulo: "Monitoramento", pergunta: "o conhecimento em uso continua funcionando?" },
+  { id: "decisao", n: "08", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
+  { id: "execucao", n: "09", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
+  { id: "dinheiro", n: "10", titulo: "Dinheiro", pergunta: "as contas fecham?" },
+  { id: "ajustes", n: "11", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
+  { id: "fechamento", n: "12", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "13", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {

@@ -464,6 +464,58 @@ type Quarentena = {
   } | null;
 };
 
+/**
+ * O monitoramento continuo (§8.8, ADR 0035). Espelha
+ * `/api/relatorio/monitoramento`.
+ *
+ * Os dois campos que importam mais sao os que NUNCA sao verdadeiros:
+ * `ausencia_de_alarme_comprova_edge` e `ausencia_de_alarme_promove_candidata`.
+ * Eles vem da api como booleanos derivados - o frontend nao calcula nada
+ * (regra 19), e so nao pode deixar a declaracao passar em silencio.
+ */
+type Monitoramento = {
+  existe?: boolean;
+  motivo?: string;
+  estado: string;
+  mediu: boolean;
+  ausencia_de_alarme_comprova_edge: boolean;
+  ausencia_de_alarme_promove_candidata: boolean;
+  conhecimento_em_uso: { hypothesis_id: number; estado: string }[];
+  estados_que_contam_como_em_uso: string[];
+  por_que_vazio: string | null;
+  assuntos: {
+    assunto: string;
+    limiar: Record<string, unknown>;
+    veredito: Record<string, unknown>;
+    alarmes: {
+      id: number;
+      nivel: string;
+      t_ms: number;
+      s_milicents: number;
+      limiar_milicents: number;
+      motivo: string;
+    }[];
+    retestes: { id: number; nivel: string; de_ms: number }[];
+    cobertura_minima_ppm: number;
+    lacuna_maxima_barras: number;
+  }[];
+  diagnostico: {
+    o_que_e: string;
+    reserva_barras: number;
+    arl0_pela_aproximacao_de_poisson: {
+      orcamento_ppm: number;
+      arl0_exigido_barras: number;
+    }[];
+  };
+  limite_declarado: string;
+  limite_do_bootstrap: {
+    h0: string;
+    cruzamento_sob_h0_verdadeira_medido: number;
+    por_que: string;
+  };
+  estatistica: Record<string, unknown>;
+};
+
 type PortaoB = {
   existe?: boolean;
   avaliado: boolean;
@@ -971,6 +1023,7 @@ export default async function Painel({
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
     separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB, quarentena,
+    monitoramento,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -993,6 +1046,7 @@ export default async function Painel({
     chamarApi("/api/relatorio/portao-a"),
     chamarApi("/api/relatorio/portao-b"),
     chamarApi("/api/relatorio/quarentena"),
+    chamarApi("/api/relatorio/monitoramento"),
   ]);
 
   if (health.status !== 200) {
@@ -1044,6 +1098,10 @@ export default async function Painel({
   const pb = portaoB.status === 200 ? (portaoB.corpo as PortaoB) : null;
   const qt =
     quarentena.status === 200 ? (quarentena.corpo as Quarentena) : null;
+  const mon =
+    monitoramento.status === 200
+      ? (monitoramento.corpo as Monitoramento)
+      : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
 
@@ -2907,7 +2965,142 @@ export default async function Painel({
         )}
       </Secao>
 
-      {/* =================================================== 07 · DECISAO */}
+      {/* ============================================ 07 · MONITORAMENTO */}
+      <Secao id="monitoramento">
+        {/* A AUSENCIA DE SUJEITO vem primeiro, e ela e o ponto da secao.
+
+            §8.8 monitora "conhecimento em uso". Na 0C nao ha nenhum, e o
+            campo que diz isso e derivado de consulta a
+            `hypothesis_estado_atual` - nao um `if` sobre a fase. Uma secao
+            vazia seria lida como "o monitor esta quebrado"; esta diz que ele
+            esta certo e nao tem o que monitorar. */}
+        {!mon?.existe ? (
+          <div className="aviso" style={{ marginTop: 0 }}>
+            <p style={{ margin: 0 }}>
+              <strong>Sem dataset ingerido.</strong> {mon?.motivo ?? "Nao ha monitoramento a mostrar."}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="aviso" style={{ marginTop: 0 }}>
+              <p style={{ marginBottom: 6 }}>
+                <strong>{mon.estado.replace(/_/g, " ")}</strong>{" "}
+                <span className="sub">CUSUM unilateral inferior — ADR 0035</span>
+              </p>
+              <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                {mon.motivo}
+              </p>
+            </div>
+
+            <Tiles>
+              <Tile
+                rotulo="conhecimento em uso"
+                contexto={mon.estados_que_contam_como_em_uso.join(" · ")}
+              >
+                {String(mon.conhecimento_em_uso.length)}
+              </Tile>
+              <Tile
+                rotulo="ausencia de alarme comprova edge?"
+                contexto="nao alarmar e tambem o comportamento de um teste insensivel"
+              >
+                <Pill ok={mon.ausencia_de_alarme_comprova_edge} sim="SIM" nao="nao" />
+              </Tile>
+              <Tile
+                rotulo="ausencia de alarme promove candidata?"
+                contexto="nunca, em nenhum estado deste monitor"
+              >
+                <Pill
+                  ok={mon.ausencia_de_alarme_promove_candidata}
+                  sim="SIM"
+                  nao="nao"
+                />
+              </Tile>
+            </Tiles>
+
+            {mon.por_que_vazio ? (
+              <p className="sub" style={{ marginTop: 0 }}>
+                {mon.por_que_vazio}
+              </p>
+            ) : null}
+
+            {/* A INSENSIBILIDADE, com numero. §14.4 mandou registrar FDR e
+                poder JUNTOS para que "nao rejeitou nada" nunca fosse lido
+                como "esta calibrado" - aqui e a mesma familia. */}
+            <h3>O que este horizonte permite detectar</h3>
+            <p className="sub" style={{ marginTop: 0 }}>
+              {mon.diagnostico.o_que_e}
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>orcamento de falso alarme</th>
+                  <th>ARL₀ que a aproximacao exigiria</th>
+                  <th>em dias</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mon.diagnostico.arl0_pela_aproximacao_de_poisson.map((t) => (
+                  <tr key={t.orcamento_ppm}>
+                    <td>{(t.orcamento_ppm / 10000).toFixed(1)}%</td>
+                    <td>{t.arl0_exigido_barras.toLocaleString("pt-BR")}</td>
+                    <td>
+                      {Math.round(t.arl0_exigido_barras / 96).toLocaleString(
+                        "pt-BR",
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="sub">
+              Reserva da fase:{" "}
+              {mon.diagnostico.reserva_barras.toLocaleString("pt-BR")} barras.
+            </p>
+
+            {mon.assuntos.length ? (
+              <>
+                <h3>Assuntos monitorados</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>assunto</th>
+                      <th>estado</th>
+                      <th>alarmes</th>
+                      <th>retestes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mon.assuntos.map((a) => (
+                      <tr key={a.assunto}>
+                        <td>{a.assunto}</td>
+                        <td>{String(a.veredito.estado)}</td>
+                        <td>{a.alarmes.map((x) => x.nivel).join(", ") || "—"}</td>
+                        <td>{String(a.retestes.length)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+
+            <h3>Os limites, declarados</h3>
+            <p className="sub" style={{ marginTop: 0 }}>
+              {mon.limite_declarado}
+            </p>
+            <p className="sub">
+              <strong>H₀ do bootstrap:</strong> {mon.limite_do_bootstrap.h0}.{" "}
+              {mon.limite_do_bootstrap.por_que}
+            </p>
+
+            <details>
+              <summary>json cru — monitoramento</summary>
+              <pre>{JSON.stringify(mon, null, 2)}</pre>
+            </details>
+          </>
+        )}
+      </Secao>
+
+      {/* =================================================== 08 · DECISAO */}
       <Secao id="decisao">
         <Tiles>
           <Tile
@@ -3118,7 +3311,7 @@ export default async function Painel({
         )}
       </Secao>
 
-      {/* ================================================== 04 · EXECUCAO */}
+      {/* ================================================== 09 · EXECUCAO */}
       <Secao id="execucao">
         <Tiles>
           <Tile rotulo="Idas e voltas" contexto="uma compra e a venda que a fecha">
@@ -3269,7 +3462,7 @@ export default async function Painel({
         </div>
       </Secao>
 
-      {/* ================================================== 05 · DINHEIRO */}
+      {/* ================================================== 10 · DINHEIRO */}
       <Secao id="dinheiro">
         {l?.escopo === "livro_inteiro" ? (
           <div className="aviso warn" style={{ marginTop: 0 }}>
@@ -3421,7 +3614,7 @@ export default async function Painel({
         </div>
       </Secao>
 
-      {/* =============================================== 06 · CONFIGURACAO */}
+      {/* =============================================== 11 · CONFIGURACAO */}
       <Secao id="ajustes">
         {h.config_hash_confere === false ? (
           <div className="aviso bad" style={{ marginTop: 0 }}>
@@ -3587,7 +3780,8 @@ export default async function Painel({
         </Card>
       </Secao>
 
-      {/* ================================================= 07 · SUBSTRATO */}
+      {/* ================================================= 13 · SUBSTRATO */}
+      {/* ================================================ 12 · FECHAMENTO */}
       <Secao id="fechamento">
         {/* O relatorio da 0A. Nenhum numero e calculado aqui: a resposta
             inteira vem de /api/relatorio, onde ela e DERIVADA de doze
