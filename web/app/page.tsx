@@ -465,6 +465,33 @@ type Quarentena = {
 };
 
 /**
+ * O relatorio da fase 0C (incremento 21). Espelha `/api/relatorio/fase-0c`.
+ *
+ * Ele nasce PROVISORIO, e o estado e o primeiro campo de proposito: um
+ * relatorio provisorio cujo rotulo aparece no fim e um relatorio que sera
+ * citado como definitivo.
+ */
+type Fase0C = {
+  fase: string;
+  pergunta: string;
+  estado: string;
+  o_que_provisorio_quer_dizer: string;
+  gates_de_evidencia?: Record<
+    string,
+    { cumprido: boolean; por_que_bloqueia: string | null }
+  >;
+  pendentes?: string[];
+  resposta_da_0c: string | null;
+  por_que_sem_resposta: string | null;
+  nao_responde?: string[];
+  decisao_de_capacidade?: {
+    escolhida: string | null;
+    bloqueia: string;
+    nao_bloqueia: string;
+  };
+};
+
+/**
  * A capacidade experimental do desenho (D48, ADR 0038). Espelha
  * `/api/relatorio/viabilidade`.
  *
@@ -494,13 +521,35 @@ type Viabilidade = {
     t_exigido_micro: number;
     t_secao_8_3_micro: number;
   };
+  taxa_de_referencia?: {
+    hypothesis_id: number;
+    efeito_minimo_cents: number;
+    horizonte_declarado_barras: number;
+    taxa_por_barra_bps_micro: number;
+    n_bruto_necessario: number;
+    efeito_acumulado_no_cruzamento_cents: number;
+    o_efeito_minimo_nao_e_um_total_constante: string;
+  } | null;
+  conferencia_dimensional?: Record<string, string>;
+  cenarios_prospectivos_nao_sao_dado_reutilizavel?: string;
   horizontes?: Array<{
     horizonte: string;
     barras: number;
+    cenario: string;
+    reutilizavel_pela_hipotese_atual: boolean;
+    por_que: string;
     n_efetivo_disponivel: number;
     sharpe_anualizado_milesimos: number;
     menor_efeito_detectavel_cents: number;
+    efeito_esperado_acumulado_cents: number | null;
+    diferenca_cents: number | null;
   }>;
+  decisao_de_capacidade?: {
+    escolhida: string | null;
+    saidas_possiveis: string[];
+    bloqueia: string;
+    nao_bloqueia: string;
+  };
   hipoteses?: Array<{
     hypothesis_id: number;
     agente_origem: string;
@@ -583,6 +632,21 @@ type PortaoB = {
   ha_candidata_digna_de_auditoria?: boolean;
   auditoria?: string | null;
   o_que_aprovar_nao_significa?: string[];
+  /** A matriz da D47, DERIVADA de `portao_b.resolver`. Ela descreve a
+   *  REGRA e nao este lote, entao vem sempre - inclusive sem candidata. */
+  matriz_de_decisao?: Array<{
+    caso: string;
+    descricao: string;
+    by_rejeitou: boolean;
+    dsr_passou: boolean;
+    amostra_suficiente: boolean;
+    portao_b: string;
+    dsr_decidiria_sozinho: boolean;
+    leitura_se_o_dsr_decidisse: string | null;
+    resultado_final: string;
+    por_que_inconclusivo: string | null;
+  }>;
+  matriz_como_ler?: string;
   /** A resposta da FASE, derivada dos dois portoes. §19.4 chama pelo nome o
    *  desfecho de passar no A e falhar no B. */
   resposta_da_0b?: {
@@ -1077,7 +1141,7 @@ export default async function Painel({
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
     separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB, quarentena,
-    monitoramento, viabilidade,
+    monitoramento, viabilidade, fase0c,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -1102,6 +1166,7 @@ export default async function Painel({
     chamarApi("/api/relatorio/quarentena"),
     chamarApi("/api/relatorio/monitoramento"),
     chamarApi("/api/relatorio/viabilidade"),
+    chamarApi("/api/relatorio/fase-0c"),
   ]);
 
   if (health.status !== 200) {
@@ -1161,6 +1226,7 @@ export default async function Painel({
     viabilidade.status === 200
       ? (viabilidade.corpo as Viabilidade)
       : null;
+  const f0c = fase0c.status === 200 ? (fase0c.corpo as Fase0C) : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
 
@@ -2840,6 +2906,87 @@ export default async function Painel({
           </div>
         ) : null}
 
+        {/* A MATRIZ DA D47, e ela vem sempre - inclusive sem candidata.
+
+            Ela descreve a REGRA, e nao este lote. Se aparecesse so quando
+            houvesse candidata, a unica forma de saber como o portao decide
+            seria ter algo para decidir - e a D47 existe justamente para que a
+            regra seja legivel antes. */}
+        {pb?.matriz_de_decisao ? (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>Matriz de decisao — o DSR nunca decide sozinho</h3>
+            <p className="sub">{pb.matriz_como_ler}</p>
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>caso</th>
+                    <th className="num">BY</th>
+                    <th className="num">DSR</th>
+                    <th className="num">amostra</th>
+                    <th>portao B</th>
+                    <th>resultado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pb.matriz_de_decisao.map((l) => (
+                    <tr key={l.caso}>
+                      <td title={l.descricao}>{l.caso.replace(/_/g, " ")}</td>
+                      <td className="num">
+                        <Pill ok={l.by_rejeitou} sim="ok" nao="X" />
+                      </td>
+                      <td className="num">
+                        <Pill ok={l.dsr_passou} sim="ok" nao="X" />
+                      </td>
+                      <td className="num">
+                        <Pill ok={l.amostra_suficiente} sim="ok" nao="X" />
+                      </td>
+                      <td className="sub">{l.portao_b}</td>
+                      <td>
+                        <span
+                          className={
+                            l.resultado_final === "sobrevivente"
+                              ? "pill ok"
+                              : l.resultado_final === "rejeitado"
+                                ? "pill bad"
+                                : "pill neutro"
+                          }
+                          title={l.por_que_inconclusivo ?? l.descricao}
+                        >
+                          {l.resultado_final}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="sub" style={{ marginTop: 10 }}>
+              <strong>Os tres inconclusivos tem motivos diferentes</strong>, e a
+              R51 existe para separa-los:
+            </p>
+            <ul className="sub" style={{ fontSize: 12.5 }}>
+              {pb.matriz_de_decisao
+                .filter((l) => l.por_que_inconclusivo)
+                .map((l) => (
+                  <li key={l.caso}>
+                    <strong>{l.caso.replace(/_/g, " ")}</strong> —{" "}
+                    {l.por_que_inconclusivo}
+                  </li>
+                ))}
+            </ul>
+            {pb.matriz_de_decisao.some((l) => l.dsr_decidiria_sozinho) ? (
+              <p className="sub">
+                <strong>A leitura antiga fica visivel:</strong> no caso em que o
+                DSR reprova sozinho, o resultado ANTES da D47 seria{" "}
+                <code>rejeitado</code> — e ele aparece em{" "}
+                <code>leitura_se_o_dsr_decidisse</code>. Apagar essa leitura
+                esconderia que houve correcao.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         <details>
           <summary>json cru — portao B</summary>
           <pre>{JSON.stringify(pb, null, 2)}</pre>
@@ -3226,50 +3373,131 @@ export default async function Painel({
               </Tile>
             </Tiles>
 
-            {/* A pergunta INVERTIDA: nao "esta hipotese cabe?", e "o que
-                caberia?". Ela nao depende de nenhuma hipotese ja escrita, e e
-                por isso que sustenta uma decisao prospectiva. */}
+            {/* A TAXA, explicita e antes da tabela. Sem ela a tabela e
+                ilegivel: o efeito minimo e um TOTAL declarado sobre um
+                horizonte, e o que a conta detecta e a taxa que os dois
+                implicam. Deixar "US$ 500" parecer um total constante foi o
+                defeito que o usuario apontou. */}
+            {via.taxa_de_referencia ? (
+              <div className="aviso" style={{ marginTop: 12 }}>
+                <p style={{ marginBottom: 6 }}>
+                  <strong>
+                    O efeito minimo NAO e um total constante — ele e uma taxa
+                  </strong>
+                </p>
+                <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                  {via.taxa_de_referencia.o_efeito_minimo_nao_e_um_total_constante}
+                </p>
+              </div>
+            ) : null}
+
             <h3>O que cada horizonte consegue detectar</h3>
             <p className="sub">
-              O Sharpe anualizado e o numero comparavel entre horizontes; o
-              efeito em centavos sobe com a janela porque e um total sobre ela.
-              O teto que o schema aceita declarar e 5,000.
+              O Sharpe anualizado e o <strong>unico numero comparavel</strong>{" "}
+              entre horizontes. O efeito em centavos nao e: ele e um total sobre
+              a janela, entao esperado e detectavel crescem os dois. O teto que
+              o schema aceita declarar e 5,000.
             </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>horizonte</th>
-                  <th className="num">barras</th>
-                  <th className="num">n efetivo</th>
-                  <th className="num">Sharpe minimo detectavel</th>
-                  <th className="num">menor efeito</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(via.horizontes ?? []).map((h) => (
-                  <tr key={h.horizonte}>
-                    <td>{h.horizonte.replace(/_/g, " ")}</td>
-                    <td className="num">{h.barras.toLocaleString("pt-BR")}</td>
-                    <td className="num">
-                      {h.n_efetivo_disponivel.toLocaleString("pt-BR")}
-                    </td>
-                    <td
-                      className={
-                        h.sharpe_anualizado_milesimos > 5000 ? "num bad" : "num"
-                      }
-                    >
-                      {(h.sharpe_anualizado_milesimos / 1000).toFixed(3)}
-                    </td>
-                    <td className="num">
-                      <Dinheiro
-                        minor={h.menor_efeito_detectavel_cents}
-                        moeda="USD"
-                      />
-                    </td>
+            {via.conferencia_dimensional ? (
+              <p className="sub">
+                <strong>A diferenca piora antes de melhorar.</strong>{" "}
+                {via.conferencia_dimensional["a_diferenca_PIORA_antes_de_melhorar"]}
+              </p>
+            ) : null}
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>horizonte</th>
+                    <th>cenario</th>
+                    <th className="num">barras</th>
+                    <th className="num">n efetivo</th>
+                    <th className="num">esperado acumulado</th>
+                    <th className="num">minimo detectavel</th>
+                    <th className="num">diferenca</th>
+                    <th className="num">Sharpe minimo</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(via.horizontes ?? []).map((h) => (
+                    <tr key={h.horizonte}>
+                      <td>{h.horizonte.replace(/_/g, " ")}</td>
+                      <td>
+                        <span
+                          className={
+                            h.reutilizavel_pela_hipotese_atual
+                              ? "pill ok"
+                              : "pill neutro"
+                          }
+                          title={h.por_que}
+                        >
+                          {h.cenario}
+                        </span>
+                      </td>
+                      <td className="num">
+                        {h.barras.toLocaleString("pt-BR")}
+                      </td>
+                      <td className="num">
+                        {h.n_efetivo_disponivel.toLocaleString("pt-BR")}
+                      </td>
+                      <td className="num">
+                        {h.efeito_esperado_acumulado_cents === null ? (
+                          "—"
+                        ) : (
+                          <Dinheiro
+                            minor={h.efeito_esperado_acumulado_cents}
+                            moeda="USD"
+                          />
+                        )}
+                      </td>
+                      <td className="num">
+                        <Dinheiro
+                          minor={h.menor_efeito_detectavel_cents}
+                          moeda="USD"
+                        />
+                      </td>
+                      <td
+                        className={
+                          h.diferenca_cents !== null && h.diferenca_cents < 0
+                            ? "num bad"
+                            : "num"
+                        }
+                      >
+                        {h.diferenca_cents === null ? (
+                          "—"
+                        ) : (
+                          <Dinheiro minor={h.diferenca_cents} moeda="USD" />
+                        )}
+                      </td>
+                      <td
+                        className={
+                          h.sharpe_anualizado_milesimos > 5000
+                            ? "num bad"
+                            : "num"
+                        }
+                      >
+                        {(h.sharpe_anualizado_milesimos / 1000).toFixed(3)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* E a linha que o usuario exigiu que fosse explicita: cenario
+                prospectivo NAO e dado que a hipotese atual possa anexar. */}
+            {via.cenarios_prospectivos_nao_sao_dado_reutilizavel ? (
+              <div className="aviso" style={{ marginTop: 12 }}>
+                <p style={{ marginBottom: 6 }}>
+                  <strong>
+                    Cenario prospectivo nao e dado reutilizavel
+                  </strong>
+                </p>
+                <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                  {via.cenarios_prospectivos_nao_sao_dado_reutilizavel}
+                </p>
+              </div>
+            ) : null}
 
             {/* As hipoteses ja registradas, RELIDAS contra a regua nova. Nada
                 aqui altera linha nenhuma: a D48 nao e retroativa, e a coluna
@@ -3383,7 +3611,110 @@ export default async function Painel({
         )}
       </Secao>
 
-      {/* =================================================== 09 · DECISAO */}
+      {/* =================================================== 09 · FASE 0C */}
+      <Secao id="fase-0c">
+        {/* O ESTADO vem primeiro, e a posicao nao e detalhe.
+
+            Um relatorio provisorio cujo rotulo aparece no fim e um relatorio
+            que sera lido como definitivo: a pessoa ja formou a conclusao
+            quando chega la. */}
+        {!f0c ? (
+          <div className="aviso" style={{ marginTop: 0 }}>
+            <p style={{ margin: 0 }}>
+              <strong>Relatorio da fase indisponivel.</strong>
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="aviso" style={{ marginTop: 0 }}>
+              <p style={{ marginBottom: 6 }}>
+                <strong>
+                  {f0c.estado === "definitivo"
+                    ? "DEFINITIVO"
+                    : "PROVISORIO — aguardando evidencia"}
+                </strong>{" "}
+                <span className="sub">incremento 21</span>
+              </p>
+              <p className="sub" style={{ margin: 0, fontSize: 12.5 }}>
+                {f0c.o_que_provisorio_quer_dizer}
+              </p>
+            </div>
+
+            <p className="sub">
+              <strong>A pergunta da fase:</strong> {f0c.pergunta}
+            </p>
+
+            {/* Os tres gates, e cada um DIZ POR QUE bloqueia. Um gate que so
+                diz `false` manda procurar; um que diz por que, informa. */}
+            <h3>Gates de evidencia</h3>
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>gate</th>
+                    <th className="num">cumprido</th>
+                    <th>por que bloqueia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(f0c.gates_de_evidencia ?? {}).map(
+                    ([nome, g]) => (
+                      <tr key={nome}>
+                        <td>{nome.replace(/_/g, " ")}</td>
+                        <td className="num">
+                          <Pill ok={g.cumprido} sim="SIM" nao="nao" />
+                        </td>
+                        <td className="sub">{g.por_que_bloqueia ?? "—"}</td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* A resposta e `None` com motivo, e NUNCA `false` - que afirmaria
+                que a 0C nao fecha, quando ela apenas nao terminou. */}
+            <Tiles>
+              <Tile
+                rotulo="resposta da 0C"
+                contexto={
+                  f0c.por_que_sem_resposta ??
+                  "derivada das condicoes acima, todas cumpridas"
+                }
+                heroi
+              >
+                {f0c.resposta_da_0c ?? "aguardando"}
+              </Tile>
+              <Tile
+                rotulo="gates pendentes"
+                contexto={(f0c.pendentes ?? []).join(" · ") || "nenhum"}
+              >
+                {String((f0c.pendentes ?? []).length)}
+              </Tile>
+              <Tile
+                rotulo="decisao de capacidade"
+                contexto="bloqueia hipotese nova; NAO bloqueia este relatorio"
+              >
+                {f0c.decisao_de_capacidade?.escolhida ?? "nao tomada"}
+              </Tile>
+            </Tiles>
+
+            <h3>O que a 0C NAO responde</h3>
+            <ul className="sub" style={{ fontSize: 12.5 }}>
+              {(f0c.nao_responde ?? []).map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+
+            <details>
+              <summary>json cru — relatorio da fase 0C</summary>
+              <pre>{JSON.stringify(f0c, null, 2)}</pre>
+            </details>
+          </>
+        )}
+      </Secao>
+
+      {/* =================================================== 10 · DECISAO */}
       <Secao id="decisao">
         <Tiles>
           <Tile
@@ -3594,7 +3925,7 @@ export default async function Painel({
         )}
       </Secao>
 
-      {/* ================================================== 10 · EXECUCAO */}
+      {/* ================================================== 11 · EXECUCAO */}
       <Secao id="execucao">
         <Tiles>
           <Tile rotulo="Idas e voltas" contexto="uma compra e a venda que a fecha">
@@ -3745,7 +4076,7 @@ export default async function Painel({
         </div>
       </Secao>
 
-      {/* ================================================== 11 · DINHEIRO */}
+      {/* ================================================== 12 · DINHEIRO */}
       <Secao id="dinheiro">
         {l?.escopo === "livro_inteiro" ? (
           <div className="aviso warn" style={{ marginTop: 0 }}>
@@ -3897,7 +4228,7 @@ export default async function Painel({
         </div>
       </Secao>
 
-      {/* =============================================== 12 · CONFIGURACAO */}
+      {/* =============================================== 13 · CONFIGURACAO */}
       <Secao id="ajustes">
         {h.config_hash_confere === false ? (
           <div className="aviso bad" style={{ marginTop: 0 }}>
@@ -4063,7 +4394,7 @@ export default async function Painel({
         </Card>
       </Secao>
 
-      {/* ================================================ 13 · FECHAMENTO */}
+      {/* ================================================ 14 · FECHAMENTO */}
       <Secao id="fechamento">
         {/* O relatorio da 0A. Nenhum numero e calculado aqui: a resposta
             inteira vem de /api/relatorio, onde ela e DERIVADA de doze
@@ -4253,7 +4584,7 @@ export default async function Painel({
         )}
       </Secao>
 
-      {/* ================================================= 14 · SUBSTRATO */}
+      {/* ================================================= 15 · SUBSTRATO */}
       <Secao id="substrato">
         <div className="duas">
           <Card titulo="Credenciais e volume">

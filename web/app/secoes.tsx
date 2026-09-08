@@ -67,6 +67,11 @@ export const ALEM_DOS_BLOCOS: { assunto: string; secao: string }[] = [
   // resposta e nao, e uma conclusao sobre o que NAO da para medir e a que
   // mais facilmente some de um painel.
   { assunto: "viabilidade: capacidade experimental sob BY + potencia de 80% (0C)", secao: "#viabilidade" },
+  // O incremento 21. Secao propria porque a pergunta e a da FASE, e nao a de
+  // um run - e porque ela carrega um estado que nenhuma outra tem:
+  // PROVISORIO. Um relatorio de fase sem esse rotulo bem visivel e um
+  // relatorio que sera citado como definitivo.
+  { assunto: "relatorio da fase 0C, PROVISORIO ate a evidencia chegar", secao: "#fase-0c" },
 ];
 
 export const SECOES: { id: string; n: string; titulo: string; pergunta: string }[] = [
@@ -99,12 +104,16 @@ export const SECOES: { id: string; n: string; titulo: string; pergunta: string }
   // funciona nao resolve. Na 0C a resposta e que o desenho NAO consegue
   // testar o efeito minimo, e o numero fica ao lado da frase.
   { id: "viabilidade", n: "08", titulo: "Viabilidade", pergunta: "este desenho consegue testar o efeito minimo?" },
-  { id: "decisao", n: "09", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
-  { id: "execucao", n: "10", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
-  { id: "dinheiro", n: "11", titulo: "Dinheiro", pergunta: "as contas fecham?" },
-  { id: "ajustes", n: "12", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
-  { id: "fechamento", n: "13", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
-  { id: "substrato", n: "14", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
+  // O incremento 21, e ele fecha o bloco das perguntas da FASE. Vem depois
+  // da viabilidade porque depende dela: a capacidade experimental e uma das
+  // coisas que o relatorio da fase reporta como NAO respondida.
+  { id: "fase-0c", n: "09", titulo: "Fase 0C", pergunta: "a 0C responde a propria pergunta? (ainda nao - provisorio)" },
+  { id: "decisao", n: "10", titulo: "Decisao", pergunta: "como ele chegou nessa regra, e quanto custou?" },
+  { id: "execucao", n: "11", titulo: "Execucao", pergunta: "o que foi feito no mercado?" },
+  { id: "dinheiro", n: "12", titulo: "Dinheiro", pergunta: "as contas fecham?" },
+  { id: "ajustes", n: "13", titulo: "Configuracao", pergunta: "sob que parametros isso rodou?" },
+  { id: "fechamento", n: "14", titulo: "Fechamento", pergunta: "a 0A responde a propria pergunta?" },
+  { id: "substrato", n: "15", titulo: "Substrato", pergunta: "o volume persiste mesmo?" },
 ];
 
 export function Nav() {

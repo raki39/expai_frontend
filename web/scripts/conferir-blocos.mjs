@@ -88,9 +88,22 @@ for (const id of secoes) {
 //    duas pode haver um comentario explicativo, e exigir adjacencia faria a
 //    guarda acusar justamente as secoes mais documentadas.
 const faixasVistas = [];
-for (const m of pagina.matchAll(/\{\/\* =+ (\d+) · ([A-ZÇÃÕÉ ]+?) \*\/\}/g)) {
+// O titulo aceita DIGITO. Sem isso, `09 · FASE 0C` nao casava como faixa,
+// e a secao aparecia sem faixa nenhuma - **guarda estreita mente na
+// direcao de dar trabalho, mas mente.**
+//
+// Terceira vez que um regex deste projeto e estreito demais pelo mesmo
+// motivo: o digito de `b4` e o hifen de `portao-a` ja tinham feito a
+// guarda do export acusar rota descoberta que estava coberta. O
+// comentario que conta essa licao ja existia nas duas vezes anteriores,
+// sem que o padrao fosse generalizado - entao aqui a classe e escrita
+// larga de proposito, e o que restringe e o separador ` · `.
+for (const m of pagina.matchAll(/\{\/\* =+ (\d+) · ([A-ZÇÃÕÉ0-9 ]+?) \*\/\}/g)) {
   const resto = pagina.slice(m.index + m[0].length);
-  const alvo = resto.match(/<Secao id="([a-z-]+)"/);
+  // E o id tambem aceita digito: `fase-0c` casava como `fase-` e a faixa
+  // ia parar na secao SEGUINTE. Mesma estreiteza da linha acima, na linha
+  // de baixo - foi preciso corrigir as duas para a guarda voltar a ver.
+  const alvo = resto.match(/<Secao id="([a-z0-9-]+)"/);
   faixasVistas.push({
     n: m[1],
     titulo: m[2].trim(),
