@@ -14,7 +14,9 @@ import { useFormStatus } from "react-dom";
  * pode parecer com as outras. Um botao que custa R$0,00 e um que custa R$0,34
  * com a mesma aparencia sao um convite a clicar sem ler.
  *
- * E o unico componente de cliente do painel. Todo o resto e servidor.
+ * Um dos DOIS componentes de cliente do painel. O outro e
+ * `certificacao-a1a.tsx`, que repete o pedido da proxima etapa da
+ * certificacao (OP-1). Todo o resto e servidor.
  */
 export function Botao({
   children,

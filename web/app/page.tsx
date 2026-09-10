@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { chamarApi } from "@/lib/api";
 import { temSessao } from "@/lib/auth";
 import { Botao } from "./botao";
+import { CertificacaoA1a, type EstadoCertificacaoA1a } from "./certificacao-a1a";
 import { Card, Dinheiro, Hash, Nota, Pill, Resultado, Tile, Tiles, Utc } from "./ui";
 import { Curva, type DadosDaCurva } from "./curva";
 import { Estado, Nav, Secao } from "./secoes";
@@ -1160,7 +1161,7 @@ export default async function Painel({
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
     separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB, quarentena,
-    monitoramento, viabilidade, fase0c,
+    monitoramento, viabilidade, fase0c, certA1a,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -1186,6 +1187,7 @@ export default async function Painel({
     chamarApi("/api/relatorio/monitoramento"),
     chamarApi("/api/relatorio/viabilidade"),
     chamarApi("/api/relatorio/fase-0c"),
+    chamarApi("/api/certificacao/a1a"),
   ]);
 
   if (health.status !== 200) {
@@ -1235,6 +1237,8 @@ export default async function Painel({
   const cb = a1b.status === 200 ? (a1b.corpo as A1b) : null;
   const pa = portaoA.status === 200 ? (portaoA.corpo as PortaoA) : null;
   const pb = portaoB.status === 200 ? (portaoB.corpo as PortaoB) : null;
+  const certA =
+    certA1a.status === 200 ? (certA1a.corpo as EstadoCertificacaoA1a) : null;
   const qt =
     quarentena.status === 200 ? (quarentena.corpo as Quarentena) : null;
   const mon =
@@ -2290,6 +2294,11 @@ export default async function Painel({
             </p>
           ) : null}
         </div>
+
+        {/* A certificacao da VIGENTE, em etapas (OP-1). O painel chama a
+            proxima sozinho e mostra o progresso; quem decide qual e a
+            proxima, se pode selar e por que abortou e o backend. */}
+        <CertificacaoA1a inicial={certA} />
 
         {pa?.condicoes ? (
           <div className="card" style={{ marginTop: 14 }}>
