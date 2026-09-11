@@ -1,3 +1,4 @@
+import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { chamarApi } from "@/lib/api";
@@ -1135,6 +1136,46 @@ async function gravarSentinela(formData: FormData) {
   revalidatePath("/");
 }
 
+/* ------------------------------------------------ carregamento progressivo
+ * Tres secoes dependem de rotas que o backend RECALCULA a cada leitura:
+ * `/api/relatorio/portao-a`, `/portao-b` e `/fase-0c`. Medido em producao em
+ * 2026-09-11, com as 25 chamadas juntas: 68 s, 138 s e 75 s. O `Promise.all`
+ * unico fazia a pagina INTEIRA esperar a mais lenta - nenhum byte saia antes
+ * de 139 s, nem o cabecalho.
+ *
+ * O que mudou e SO quem espera por quem. As 25 chamadas continuam saindo
+ * juntas, no mesmo instante, sem cache e sem retry: o frescor e o mesmo. As
+ * tres pesadas nao seguram mais a pagina - cada uma segura so a propria
+ * secao, que aparece quando a resposta chega. O conteudo de cada secao e o
+ * MESMO JSX de antes, recebendo o MESMO valor.
+ * ---------------------------------------------------------------------- */
+
+/** Espera UMA promessa e entrega o valor ao JSX da secao. */
+async function Quando<T>({
+  dado,
+  children,
+}: {
+  dado: Promise<T>;
+  children: (valor: T) => ReactNode;
+}) {
+  return <>{children(await dado)}</>;
+}
+
+/** O lugar da secao enquanto a rota dela nao responde. Diz QUAL rota. */
+function Carregando({ rota }: { rota: string }) {
+  return (
+    <div className="aviso" style={{ marginTop: 0 }} data-carregando={rota}>
+      <p style={{ margin: 0 }}>
+        <strong>Carregando esta parte…</strong>{" "}
+        <span className="sub">
+          ela espera <code>{rota}</code>, que a api calcula na hora. O resto
+          da pagina nao espera por ela.
+        </span>
+      </p>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- pagina */
 
 export default async function Painel({
@@ -1157,11 +1198,29 @@ export default async function Painel({
   if (!(await temSessao())) redirect("/login");
 
   const p = await searchParams;
+
+  // As tres rotas que o backend recalcula a cada leitura saem no MESMO
+  // instante que as outras 22 - mas nao seguram a pagina: cada uma segura so
+  // a propria secao (ver `Quando`, acima).
+  const paP = chamarApi("/api/relatorio/portao-a").then((r) =>
+    r.status === 200 ? (r.corpo as PortaoA) : null,
+  );
+  const pbP = chamarApi("/api/relatorio/portao-b").then((r) =>
+    r.status === 200 ? (r.corpo as PortaoB) : null,
+  );
+  const f0cP = chamarApi("/api/relatorio/fase-0c").then((r) =>
+    r.status === 200 ? (r.corpo as Fase0C) : null,
+  );
+  // Uma falha de rede ANTES de a secao chegar a esperar nao pode virar
+  // "unhandled rejection" no Node. Isto NAO engole o erro: a secao espera a
+  // MESMA promessa, e o erro sobe dali como subia do Promise.all.
+  for (const pesada of [paP, pbP, f0cP]) pesada.catch(() => {});
+
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
-    separacao, lote, creditos, b4, a1a, a1b, portaoA, portaoB, quarentena,
-    monitoramento, viabilidade, fase0c, certA1a,
+    separacao, lote, creditos, b4, a1a, a1b, quarentena,
+    monitoramento, viabilidade, certA1a,
   ] = await Promise.all([
     chamarApi("/api/substrato/health"),
     chamarApi("/api/dataset"),
@@ -1181,12 +1240,9 @@ export default async function Painel({
     chamarApi("/api/b4"),
     chamarApi("/api/a1a"),
     chamarApi("/api/a1b"),
-    chamarApi("/api/relatorio/portao-a"),
-    chamarApi("/api/relatorio/portao-b"),
     chamarApi("/api/relatorio/quarentena"),
     chamarApi("/api/relatorio/monitoramento"),
     chamarApi("/api/relatorio/viabilidade"),
-    chamarApi("/api/relatorio/fase-0c"),
     chamarApi("/api/certificacao/a1a"),
   ]);
 
@@ -1235,8 +1291,6 @@ export default async function Painel({
   const b = b4.status === 200 ? (b4.corpo as B4) : null;
   const ca = a1a.status === 200 ? (a1a.corpo as A1a) : null;
   const cb = a1b.status === 200 ? (a1b.corpo as A1b) : null;
-  const pa = portaoA.status === 200 ? (portaoA.corpo as PortaoA) : null;
-  const pb = portaoB.status === 200 ? (portaoB.corpo as PortaoB) : null;
   const certA =
     certA1a.status === 200 ? (certA1a.corpo as EstadoCertificacaoA1a) : null;
   const qt =
@@ -1249,7 +1303,6 @@ export default async function Painel({
     viabilidade.status === 200
       ? (viabilidade.corpo as Viabilidade)
       : null;
-  const f0c = fase0c.status === 200 ? (fase0c.corpo as Fase0C) : null;
   const pre = ag.pre_registro ?? null;
   const par = ag.parecer_do_validador ?? null;
 
@@ -2266,6 +2319,9 @@ export default async function Painel({
             `pendente` nao e `passa`: o Portao A e "obrigatorio,
             eliminatorio", e um criterio que ninguem mediu nao e um criterio
             satisfeito. */}
+        <Suspense fallback={<Carregando rota="/api/relatorio/portao-a" />}>
+        <Quando dado={paP}>
+        {(pa) => (
         <div
           className={`aviso ${
             pa?.reprova ? "bad" : pa?.passa ? "ok" : ""
@@ -2294,12 +2350,19 @@ export default async function Painel({
             </p>
           ) : null}
         </div>
+        )}
+        </Quando>
+        </Suspense>
 
         {/* A certificacao da VIGENTE, em etapas (OP-1). O painel chama a
             proxima sozinho e mostra o progresso; quem decide qual e a
             proxima, se pode selar e por que abortou e o backend. */}
         <CertificacaoA1a inicial={certA} />
 
+        <Suspense fallback={<Carregando rota="/api/relatorio/portao-a" />}>
+        <Quando dado={paP}>
+        {(pa) => (
+        <>
         {pa?.condicoes ? (
           <div className="card" style={{ marginTop: 14 }}>
             <h3>As condicoes, cada uma derivada de consulta</h3>
@@ -2645,10 +2708,18 @@ export default async function Painel({
             {JSON.stringify({ portao_a: pa, a1a: ca, a1b: cb }, null, 2)}
           </pre>
         </details>
+        </>
+        )}
+        </Quando>
+        </Suspense>
       </Secao>
 
       {/* =================================================== 05 · PORTAO B */}
       <Secao id="portao-b">
+        <Suspense fallback={<Carregando rota="/api/relatorio/portao-b" />}>
+        <Quando dado={pbP}>
+        {(pb) => (
+        <>
         {/* A RECUSA vem primeiro quando ela e o caso. R49: sem o A aprovado
             INTEGRALMENTE, nao ha criterio nenhum a mostrar - nem parcial,
             nem "so para ver". Um numero exibido e um numero que alguem le. */}
@@ -3034,6 +3105,10 @@ export default async function Painel({
           <summary>json cru — portao B</summary>
           <pre>{JSON.stringify(pb, null, 2)}</pre>
         </details>
+        </>
+        )}
+        </Quando>
+        </Suspense>
       </Secao>
 
       {/* ================================================ 06 · QUARENTENA */}
@@ -3665,6 +3740,10 @@ export default async function Painel({
 
       {/* =================================================== 09 · FASE 0C */}
       <Secao id="fase-0c">
+        <Suspense fallback={<Carregando rota="/api/relatorio/fase-0c" />}>
+        <Quando dado={f0cP}>
+        {(f0c) => (
+        <>
         {/* O ESTADO vem primeiro, e a posicao nao e detalhe.
 
             Um relatorio provisorio cujo rotulo aparece no fim e um relatorio
@@ -3796,6 +3875,10 @@ export default async function Painel({
             </details>
           </>
         )}
+        </>
+        )}
+        </Quando>
+        </Suspense>
       </Secao>
 
       {/* =================================================== 10 · DECISAO */}
