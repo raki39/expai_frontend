@@ -1336,14 +1336,23 @@ export default async function Painel({
     "/api/relatorio/viabilidade",
     "/api/certificacao/a1a",
   ];
+  const leves = await comLargura(
+    6,
+    LEVES.map((rota) => () => chamarApi(rota)),
+  );
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
     separacao, lote, creditos, b4, a1a, a1b, quarentena,
     monitoramento, viabilidade, certA1a,
-  ] = await comLargura(
-    6,
-    LEVES.map((rota) => () => chamarApi(rota)),
+  ] = leves;
+
+  // Quais LEVES falharam. Varias delas sao lidas sem conferir o status, e a
+  // secao que as usa acaba escrevendo uma frase de dominio - "Nenhuma hipotese
+  // pre-registrada neste run" - quando o que aconteceu foi a consulta falhar.
+  // O aviso no alto nomeia cada uma; nada e escondido nem removido.
+  const falhasLeves = LEVES.map((rota, i) => ({ rota, resposta: leves[i] })).filter(
+    ({ resposta }) => resposta.status !== 200,
   );
 
   // E AS TRES PESADAS, UMA POR VEZ, depois das leves.
@@ -1493,6 +1502,34 @@ export default async function Painel({
           <Pill ok={conferenciasOk} sim="sim" nao="NAO" />
         </Estado>
       </dl>
+
+      {falhasLeves.length ? (
+        <div className="aviso bad" data-falha="leves">
+          <p style={{ marginBottom: 6 }}>
+            <strong>
+              {falhasLeves.length === 1
+                ? "Uma consulta falhou."
+                : `${falhasLeves.length} consultas falharam.`}
+            </strong>{" "}
+            As partes que dependem delas estao INDISPONIVEIS, e o que aparecer
+            ali nao e afirmacao sobre o experimento.
+          </p>
+          <ul className="sub" style={{ fontSize: 12.5, margin: "0 0 8px" }}>
+            {falhasLeves.map(({ rota, resposta }) => (
+              <li key={rota}>
+                <code>{rota}</code> — HTTP {resposta.status}:{" "}
+                {motivoDa(resposta.corpo)}
+              </li>
+            ))}
+          </ul>
+          <p className="sub" style={{ margin: "0 0 8px", fontSize: 12.5 }}>
+            lido em <Utc ms={Date.now()} />
+          </p>
+          <form action={recarregar} className="linha">
+            <Botao pendente="consultando...">tentar de novo</Botao>
+          </form>
+        </div>
+      ) : null}
 
       <Nav />
 
