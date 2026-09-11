@@ -1,7 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { chamarApi } from "@/lib/api";
+import { chamarApi, type RespostaApi } from "@/lib/api";
 import { temSessao } from "@/lib/auth";
 import { Botao } from "./botao";
 import { CertificacaoA1a, type EstadoCertificacaoA1a } from "./certificacao-a1a";
@@ -10,6 +10,13 @@ import { Curva, type DadosDaCurva } from "./curva";
 import { Estado, Nav, Secao } from "./secoes";
 
 export const dynamic = "force-dynamic";
+
+// As tres rotas pesadas rodam UMA POR VEZ (ver `Painel`), entao a pagina
+// inteira leva mais tempo do que quando todas disputavam o processo da api -
+// o que muda e que o conteudo aparece cedo e em ordem. O teto fica
+// declarado em vez de herdado: uma pagina que passa do teto e cortada no
+// meio do fluxo, e a ultima secao nunca chega.
+export const maxDuration = 300;
 
 /* -------------------------------------------------------------- contratos
  * Formas do que a api devolve. Nao ha calculo aqui: o painel exibe o que a
@@ -1150,15 +1157,116 @@ async function gravarSentinela(formData: FormData) {
  * MESMO JSX de antes, recebendo o MESMO valor.
  * ---------------------------------------------------------------------- */
 
-/** Espera UMA promessa e entrega o valor ao JSX da secao. */
+/** Recarrega a pagina. Nao muda nada: e o "tentar de novo" da falha. */
+async function recarregar() {
+  "use server";
+  revalidatePath("/");
+}
+
+/**
+ * O que mostrar quando a CONSULTA falha — e nunca uma frase sobre o experimento.
+ *
+ * Em 2026-09-11, com o `portao-b` respondendo erro, a secao 05 escreveu "sem
+ * configuracao vigente nao ha o que avaliar" — e havia configuracao vigente. A
+ * frase do dominio so pode aparecer quando a rota RESPONDEU; quando ela falha,
+ * o que se mostra e o estado real, com status, motivo, hora e como repetir.
+ */
+function ErroDaConsulta({
+  rota,
+  status,
+  motivo,
+  lidoEmMs,
+}: {
+  rota: string;
+  status: number;
+  motivo: string;
+  lidoEmMs: number;
+}) {
+  return (
+    <div className="aviso bad" style={{ marginTop: 0 }} data-falha={rota}>
+      <p style={{ marginBottom: 6 }}>
+        <strong>INDISPONIVEL — erro ao consultar.</strong> <code>{rota}</code>{" "}
+        respondeu <strong>HTTP {status}</strong>. Isto NAO e uma afirmacao sobre
+        o experimento: foi a consulta que falhou, e o que esta secao mostraria
+        continua desconhecido.
+      </p>
+      <p className="sub" style={{ margin: "0 0 8px", fontSize: 12.5 }}>
+        motivo: {motivo} · lido em <Utc ms={lidoEmMs} />
+      </p>
+      <form action={recarregar} className="linha">
+        <Botao pendente="consultando...">tentar de novo</Botao>
+      </form>
+    </div>
+  );
+}
+
+/** O motivo em UMA linha, sem marcacao e cortado. */
+function motivoDa(corpo: unknown): string {
+  const d = (corpo as { detail?: unknown } | null)?.detail ?? corpo;
+  const texto = typeof d === "string" ? d : JSON.stringify(d ?? null);
+  const limpo = (texto ?? "").replace(/\s+/g, " ").trim();
+  if (!limpo || limpo === "null") return "(a resposta veio sem corpo)";
+  return limpo.length > 300 ? limpo.slice(0, 300) + "…" : limpo;
+}
+
+/** A falha de uma rota ja lida no `Promise.all` das leves. */
+function falhaDa(rota: string, r: RespostaApi) {
+  return {
+    rota,
+    status: r.status,
+    motivo: motivoDa(r.corpo),
+    lidoEmMs: Date.now(),
+  };
+}
+
+/**
+ * Espera a resposta de UMA rota e entrega o corpo ao JSX da secao.
+ *
+ * Status diferente de 200 nao vira `null`: vira `ErroDaConsulta`. Sem isto, a
+ * secao nao consegue distinguir "a api disse que nao ha" de "nao deu para
+ * perguntar".
+ */
 async function Quando<T>({
+  rota,
   dado,
   children,
 }: {
-  dado: Promise<T>;
-  children: (valor: T) => ReactNode;
+  rota: string;
+  dado: Promise<RespostaApi>;
+  children: (valor: T | null) => ReactNode;
 }) {
-  return <>{children(await dado)}</>;
+  const r = await dado;
+  if (r.status !== 200) {
+    return <ErroDaConsulta {...falhaDa(rota, r)} />;
+  }
+  return <>{children((r.corpo as T) ?? null)}</>;
+}
+
+/** Roda as tarefas com no maximo `largura` em voo, e devolve NA ORDEM. */
+async function comLargura<T>(
+  largura: number,
+  tarefas: (() => Promise<T>)[],
+): Promise<T[]> {
+  const feitas = new Array<T>(tarefas.length);
+  let proxima = 0;
+  async function operario() {
+    while (proxima < tarefas.length) {
+      const i = proxima++;
+      feitas[i] = await tarefas[i]();
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(largura, tarefas.length) }, operario),
+  );
+  return feitas;
+}
+
+/** A proxima so COMECA quando a anterior termina — tenha ela falhado ou nao. */
+function depoisDe<T>(
+  anterior: Promise<unknown>,
+  tarefa: () => Promise<T>,
+): Promise<T> {
+  return anterior.then(tarefa, tarefa);
 }
 
 /** O lugar da secao enquanto a rota dela nao responde. Diz QUAL rota. */
@@ -1199,52 +1307,58 @@ export default async function Painel({
 
   const p = await searchParams;
 
-  // As tres rotas que o backend recalcula a cada leitura saem no MESMO
-  // instante que as outras 22 - mas nao seguram a pagina: cada uma segura so
-  // a propria secao (ver `Quando`, acima).
-  const paP = chamarApi("/api/relatorio/portao-a").then((r) =>
-    r.status === 200 ? (r.corpo as PortaoA) : null,
-  );
-  const pbP = chamarApi("/api/relatorio/portao-b").then((r) =>
-    r.status === 200 ? (r.corpo as PortaoB) : null,
-  );
-  const f0cP = chamarApi("/api/relatorio/fase-0c").then((r) =>
-    r.status === 200 ? (r.corpo as Fase0C) : null,
-  );
-  // Uma falha de rede ANTES de a secao chegar a esperar nao pode virar
-  // "unhandled rejection" no Node. Isto NAO engole o erro: a secao espera a
-  // MESMA promessa, e o erro sobe dali como subia do Promise.all.
-  for (const pesada of [paP, pbP, f0cP]) pesada.catch(() => {});
-
+  // AS LEVES PRIMEIRO, e no maximo 6 em voo.
+  //
+  // A `api` e um processo unico. Medido em 2026-09-11: com as 25 chamadas
+  // juntas, rotas que sozinhas levam 0,2 s levavam 14 s - a disputa e o que
+  // atrasa quem ja estava pronto. Com a fila, quem e barato chega cedo.
+  const LEVES = [
+    "/api/substrato/health",
+    "/api/dataset",
+    "/api/config",
+    "/api/ledger",
+    "/api/ledger/transacoes?limite=12",
+    "/api/diagnostico/sentinela",
+    "/api/simulador",
+    "/api/simulador/execucoes?limite=10",
+    "/api/baselines",
+    "/api/agente",
+    "/api/baselines/curva",
+    "/api/relatorio",
+    "/api/dataset/separacao",
+    "/api/validador/lote",
+    "/api/validador/creditos",
+    "/api/b4",
+    "/api/a1a",
+    "/api/a1b",
+    "/api/relatorio/quarentena",
+    "/api/relatorio/monitoramento",
+    "/api/relatorio/viabilidade",
+    "/api/certificacao/a1a",
+  ];
   const [
     health, dataset, config, ledger, transacoes, sentinelas,
     simulador, execucoes, comparacao, agente, curva, relatorio,
     separacao, lote, creditos, b4, a1a, a1b, quarentena,
     monitoramento, viabilidade, certA1a,
-  ] = await Promise.all([
-    chamarApi("/api/substrato/health"),
-    chamarApi("/api/dataset"),
-    chamarApi("/api/config"),
-    chamarApi("/api/ledger"),
-    chamarApi("/api/ledger/transacoes?limite=12"),
-    chamarApi("/api/diagnostico/sentinela"),
-    chamarApi("/api/simulador"),
-    chamarApi("/api/simulador/execucoes?limite=10"),
-    chamarApi("/api/baselines"),
-    chamarApi("/api/agente"),
-    chamarApi("/api/baselines/curva"),
-    chamarApi("/api/relatorio"),
-    chamarApi("/api/dataset/separacao"),
-    chamarApi("/api/validador/lote"),
-    chamarApi("/api/validador/creditos"),
-    chamarApi("/api/b4"),
-    chamarApi("/api/a1a"),
-    chamarApi("/api/a1b"),
-    chamarApi("/api/relatorio/quarentena"),
-    chamarApi("/api/relatorio/monitoramento"),
-    chamarApi("/api/relatorio/viabilidade"),
-    chamarApi("/api/certificacao/a1a"),
-  ]);
+  ] = await comLargura(
+    6,
+    LEVES.map((rota) => () => chamarApi(rota)),
+  );
+
+  // E AS TRES PESADAS, UMA POR VEZ, depois das leves.
+  //
+  // Elas so comecam quando o esqueleto ja tem tudo, e nunca rodam duas ao
+  // mesmo tempo: e menos disputa com o rele e o coletor, que gravam no mesmo
+  // processo. O preco esta declarado: a pagina inteira termina mais tarde, e a
+  // ultima secao e a mais cara. Cada uma segura so a propria secao.
+  const paR = chamarApi("/api/relatorio/portao-a");
+  const f0cR = depoisDe(paR, () => chamarApi("/api/relatorio/fase-0c"));
+  const pbR = depoisDe(f0cR, () => chamarApi("/api/relatorio/portao-b"));
+  // Uma falha de rede ANTES de a secao chegar a esperar nao pode virar
+  // "unhandled rejection" no Node. Isto NAO engole o erro: a secao espera a
+  // MESMA promessa, e o erro sobe dali.
+  for (const pesada of [paR, f0cR, pbR]) pesada.catch(() => {});
 
   if (health.status !== 200) {
     return (
@@ -2320,7 +2434,7 @@ export default async function Painel({
             eliminatorio", e um criterio que ninguem mediu nao e um criterio
             satisfeito. */}
         <Suspense fallback={<Carregando rota="/api/relatorio/portao-a" />}>
-        <Quando dado={paP}>
+        <Quando<PortaoA> rota="/api/relatorio/portao-a" dado={paR}>
         {(pa) => (
         <div
           className={`aviso ${
@@ -2357,10 +2471,14 @@ export default async function Painel({
         {/* A certificacao da VIGENTE, em etapas (OP-1). O painel chama a
             proxima sozinho e mostra o progresso; quem decide qual e a
             proxima, se pode selar e por que abortou e o backend. */}
-        <CertificacaoA1a inicial={certA} />
+        {certA1a.status !== 200 ? (
+          <ErroDaConsulta {...falhaDa("/api/certificacao/a1a", certA1a)} />
+        ) : (
+          <CertificacaoA1a inicial={certA} />
+        )}
 
         <Suspense fallback={<Carregando rota="/api/relatorio/portao-a" />}>
-        <Quando dado={paP}>
+        <Quando<PortaoA> rota="/api/relatorio/portao-a" dado={paR}>
         {(pa) => (
         <>
         {pa?.condicoes ? (
@@ -2717,7 +2835,7 @@ export default async function Painel({
       {/* =================================================== 05 · PORTAO B */}
       <Secao id="portao-b">
         <Suspense fallback={<Carregando rota="/api/relatorio/portao-b" />}>
-        <Quando dado={pbP}>
+        <Quando<PortaoB> rota="/api/relatorio/portao-b" dado={pbR}>
         {(pb) => (
         <>
         {/* A RECUSA vem primeiro quando ela e o caso. R49: sem o A aprovado
@@ -3122,7 +3240,9 @@ export default async function Painel({
 
             E `nenhuma_candidata_admitida` e DERIVADO de consulta. Se fosse
             frase, sobreviveria intacta ao dia em que uma candidata entrasse. */}
-        {!qt?.existe ? (
+        {quarentena.status !== 200 ? (
+          <ErroDaConsulta {...falhaDa("/api/relatorio/quarentena", quarentena)} />
+        ) : !qt?.existe ? (
           <div className="aviso" style={{ marginTop: 0 }}>
             <p style={{ margin: 0 }}>
               <strong>Sem configuracao vigente.</strong> Nao ha quarentena a
@@ -3298,7 +3418,9 @@ export default async function Painel({
             `hypothesis_estado_atual` - nao um `if` sobre a fase. Uma secao
             vazia seria lida como "o monitor esta quebrado"; esta diz que ele
             esta certo e nao tem o que monitorar. */}
-        {!mon?.existe ? (
+        {monitoramento.status !== 200 ? (
+          <ErroDaConsulta {...falhaDa("/api/relatorio/monitoramento", monitoramento)} />
+        ) : !mon?.existe ? (
           <div className="aviso" style={{ marginTop: 0 }}>
             <p style={{ margin: 0 }}>
               <strong>Sem dataset ingerido.</strong> {mon?.motivo ?? "Nao ha monitoramento a mostrar."}
@@ -3433,7 +3555,9 @@ export default async function Painel({
             minimo? Nao consegue. E uma conclusao sobre o que NAO da para
             medir e a que mais facilmente some de um painel - ninguem procura
             por ela. */}
-        {!via?.disponivel ? (
+        {viabilidade.status !== 200 ? (
+          <ErroDaConsulta {...falhaDa("/api/relatorio/viabilidade", viabilidade)} />
+        ) : !via?.disponivel ? (
           <div className="aviso" style={{ marginTop: 0 }}>
             <p style={{ margin: 0 }}>
               <strong>Sem capacidade a calcular.</strong>{" "}
@@ -3741,7 +3865,7 @@ export default async function Painel({
       {/* =================================================== 09 · FASE 0C */}
       <Secao id="fase-0c">
         <Suspense fallback={<Carregando rota="/api/relatorio/fase-0c" />}>
-        <Quando dado={f0cP}>
+        <Quando<Fase0C> rota="/api/relatorio/fase-0c" dado={f0cR}>
         {(f0c) => (
         <>
         {/* O ESTADO vem primeiro, e a posicao nao e detalhe.
