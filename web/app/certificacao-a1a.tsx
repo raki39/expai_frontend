@@ -1,89 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  acompanhar,
+  conduzir,
+  type Desfecho,
+  type EstadoA1a,
+  type EtapaA1a,
+  type Relato,
+  type Resposta,
+} from "./fluxo-certificacao";
+
+export type { EstadoA1a as EstadoCertificacaoA1a } from "./fluxo-certificacao";
 
 /**
- * A certificacao do A1a em ETAPAS — OP-1.
+ * A certificação do A1a em ETAPAS — OP-1.
  *
- * O painel chama a proxima etapa sozinho e mostra o progresso. Ele NAO decide
- * nada (secao 10.2.1): qual e a proxima, se pode selar e por que abortou vem
- * do backend (`proxima`, `pode_selar`, `abortada`). O que este componente faz
- * e repetir o pedido e esperar.
+ * O painel chama a próxima etapa sozinho e mostra o progresso, e NÃO decide
+ * nada (secao 10.2.1). A ordem das chamadas mora em `fluxo-certificacao.ts`,
+ * que é testado contra um backend simulado (`npm run conferir-fluxo`); aqui só
+ * ficam as três portas e a tela.
  *
- * Tres respostas, e nenhuma e erro de rede disfarcado:
- * - 200: a etapa rodou (ou nao faltava nada) — segue;
- * - 409 "em andamento": outra etapa esta rodando — espera e le o estado;
- * - timeout do proxy: a etapa `lucro_so_sem_custos` leva ~2 min em producao e
- *   o proxy da Vercel corta em 60 s. O backend CONTINUA; o painel le o estado
- *   ate ela terminar. O pedido repetido nunca roda a etapa duas vezes.
- *
- * Recomecar depois de um ABORTO e botao proprio: o backend recusa sem
- * `nova_execucao`, e um laco automatico nao pode transformar aborto em
- * recomeco sem ninguem ver.
+ * **A regra que torna uma etapa de 2 minutos inofensiva:** toda volta LÊ o
+ * estado antes de postar. O proxy da Vercel corta em 60 s; o backend conclui a
+ * etapa mesmo assim, e a volta seguinte vê isso no estado — em vez de depender
+ * da resposta que se perdeu.
  */
 
-export type EtapaA1a = {
-  indice: number;
-  etapa: string;
-  estado: "pendente" | "em_andamento" | "interrompida" | "concluida" | "falhou";
-  tentativas: number;
-  micros: number | null;
-};
-
-export type EstadoCertificacaoA1a = {
-  existe?: boolean;
-  iniciada?: boolean;
-  execucao_id?: number;
-  alvo_de_certificacao_hash?: string;
-  plano?: string[];
-  etapas?: EtapaA1a[];
-  concluidas?: number;
-  total?: number;
-  proxima?: number | null;
-  pode_selar?: boolean;
-  em_andamento?: boolean;
-  abortada?: { motivo: string; abortada_em: string } | null;
-  selado?: { passa: boolean; selado_em: string } | null;
-  copia?: {
-    bytes_no_selo: number;
-    selada_em: string;
-    descartada: { motivo: string; residuo: boolean } | null;
-  } | null;
-  motivo?: string;
-  passa?: boolean;
-};
-
 const ROTA = "/api/proxy/certificacao/a1a";
-const ESPERA_MS = 5000;
-// 8 etapas + selo + esperas da etapa longa. Um teto, e nao uma estimativa: o
-// laco para antes se o backend disser que acabou.
-const MAX_VOLTAS = 80;
+// Um pouco acima dos 60 s do proxy: se nem o 504 dele chegar, a chamada vira
+// "sem resposta" em vez de ficar pendurada para sempre.
+const TETO_DO_POST_MS = 70_000;
+const TETO_DA_LEITURA_MS = 30_000;
 
-function esperar(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function postar(corpo: object): Promise<{ status: number; json: any } | null> {
+async function postar(corpo: Record<string, unknown>): Promise<Resposta> {
   try {
     const r = await fetch(ROTA, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(corpo),
+      signal: AbortSignal.timeout(TETO_DO_POST_MS),
     });
-    return { status: r.status, json: await r.json().catch(() => ({})) };
+    return { status: r.status, corpo: await r.json().catch(() => ({})) };
   } catch {
-    return null;
+    return { status: null, corpo: {} };
   }
 }
 
-async function ler(): Promise<EstadoCertificacaoA1a | null> {
+async function ler(): Promise<EstadoA1a | null> {
   try {
-    const r = await fetch(ROTA, { cache: "no-store" });
+    const r = await fetch(ROTA, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(TETO_DA_LEITURA_MS),
+    });
     return r.ok ? await r.json() : null;
   } catch {
     return null;
   }
 }
+
+function esperar(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+type Aviso = { tipo: "espera" | "falha" | "indisponivel"; texto: string };
 
 const CLASSE: Record<EtapaA1a["estado"], string> = {
   concluida: "ok",
@@ -93,64 +73,72 @@ const CLASSE: Record<EtapaA1a["estado"], string> = {
   pendente: "",
 };
 
-export function CertificacaoA1a({ inicial }: { inicial: EstadoCertificacaoA1a | null }) {
-  const [estado, setEstado] = useState<EstadoCertificacaoA1a | null>(inicial);
-  const [rodando, setRodando] = useState(false);
-  const [aviso, setAviso] = useState<string | null>(null);
+export function CertificacaoA1a({ inicial }: { inicial: EstadoA1a | null }) {
+  const [estado, setEstado] = useState<EstadoA1a | null>(inicial);
+  const [modo, setModo] = useState<"parado" | "conduzindo" | "acompanhando">(
+    inicial?.em_andamento ? "acompanhando" : "parado",
+  );
+  const [aviso, setAviso] = useState<Aviso | null>(null);
+  const vivo = useRef(true);
+
+  function relatar(r: Relato) {
+    if (!vivo.current) return;
+    if (r.estado) setEstado(r.estado);
+    setAviso(r.aviso ? { tipo: "espera", texto: r.aviso } : null);
+  }
+
+  function encerrar(d: Desfecho) {
+    if (!vivo.current) return;
+    if (d.estado) setEstado(d.estado);
+    if (d.fim === "falha") {
+      setAviso({ tipo: "falha", texto: `FALHA — decisao do backend: ${d.motivo}` });
+    } else if (d.fim === "indisponivel") {
+      setAviso({
+        tipo: "indisponivel",
+        texto: `o servidor nao respondeu (${d.motivo}). Nada foi decidido: continuar retoma do ponto certo`,
+      });
+    } else {
+      setAviso(d.fim === "parado" && d.motivo !== "nenhuma etapa em andamento"
+        ? { tipo: "espera", texto: d.motivo }
+        : null);
+    }
+    setModo("parado");
+  }
+
+  // Ao CARREGAR com uma etapa rodando no backend - depois de recarregar, ou de
+  // a aba ter sido fechada no meio -, o painel so ACOMPANHA. Continuar para a
+  // etapa seguinte e um clique.
+  useEffect(() => {
+    vivo.current = true;
+    if (inicial?.em_andamento) {
+      acompanhar({ ler, esperar, relatar }).then(encerrar);
+    }
+    return () => {
+      vivo.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function certificar(novaExecucao: boolean) {
-    setRodando(true);
+    setModo("conduzindo");
     setAviso(null);
-    let nova = novaExecucao;
-    for (let volta = 0; volta < MAX_VOLTAS; volta++) {
-      const r = await postar({ author: "painel", nova_execucao: nova });
-      nova = false;
-      if (r && r.status === 200) {
-        if (r.json.selado || r.json.passa !== undefined) {
-          setEstado((await ler()) ?? r.json);
-          break;
-        }
-        setEstado(r.json);
-        if (r.json.proxima === null && r.json.pode_selar) {
-          const s = await postar({ author: "painel", selar: true });
-          if (s && s.status !== 200) setAviso(String(s.json?.detail ?? s.status));
-          setEstado((await ler()) ?? s?.json ?? null);
-          break;
-        }
-        continue;
-      }
-      const detalhe = String(r?.json?.detail ?? "");
-      if (r && r.status === 409 && !detalhe.includes("em andamento")) {
-        // Abortada ou recusada: o motivo e do backend, e o laco para aqui.
-        setAviso(detalhe);
-        setEstado(await ler());
-        break;
-      }
-      // Em andamento, ou o proxy cortou a espera: a etapa segue no backend.
-      setAviso(
-        r === null || r.status >= 500
-          ? "o proxy cortou a espera; a etapa continua no backend — lendo o estado"
-          : "uma etapa esta em andamento — lendo o estado",
-      );
-      await esperar(ESPERA_MS);
-      const atual = await ler();
-      if (atual) setEstado(atual);
-    }
-    setRodando(false);
+    encerrar(await conduzir({ postar, ler, esperar, relatar }, { novaExecucao }));
   }
 
   const etapas = estado?.etapas ?? [];
   const selado = estado?.selado ?? null;
   const abortada = estado?.abortada ?? null;
+  const ocupado = modo !== "parado";
 
   return (
-    <div className="card" style={{ marginTop: 14 }}>
+    <div className="card" style={{ marginTop: 14 }} data-fluxo="le-o-estado-antes-de-postar@1">
       <h3>Certificacao da vigente — A1a em {estado?.plano?.length ?? 8} etapas</h3>
       <p className="sub" style={{ margin: "0 0 8px", fontSize: 12.5 }}>
         Uma copia descartavel SELADA, uma etapa por pedido, e o estado no banco.
-        O plano saiu da medicao dos 207 s: uma etapa por unidade indivisivel. A
-        etapa <code>lucro_so_sem_custos</code> leva ~2 min e passa do limite do
-        proxy — ela conclui no backend, e o painel espera.
+        O painel le o estado antes de cada pedido: uma etapa que passa dos 60 s
+        do proxy conclui no backend, e o painel acompanha em vez de pedir de
+        novo. Fechar a aba nao apaga nada — ao voltar, ele retoma de onde o
+        servidor diz.
       </p>
       <p style={{ margin: "0 0 8px" }}>
         {selado ? (
@@ -162,7 +150,7 @@ export function CertificacaoA1a({ inicial }: { inicial: EstadoCertificacaoA1a | 
         ) : estado?.iniciada ? (
           <span className="pill warn">
             {estado.concluidas ?? 0} de {estado.total ?? 8} etapas
-            {estado.em_andamento ? " — uma em andamento" : ""}
+            {estado.em_andamento ? " — uma em andamento no backend" : ""}
           </span>
         ) : (
           <span className="pill">nenhuma execucao para este alvo</span>
@@ -224,29 +212,37 @@ export function CertificacaoA1a({ inicial }: { inicial: EstadoCertificacaoA1a | 
         </p>
       ) : null}
 
+      {aviso ? (
+        <div
+          className={"aviso " + (aviso.tipo === "falha" ? "bad" : "")}
+          style={{ marginTop: 8 }}
+        >
+          <p style={{ margin: 0, fontSize: 12.5 }}>{aviso.texto}</p>
+        </div>
+      ) : null}
+
       <div className="acoes">
         {abortada ? (
-          <button type="button" disabled={rodando} onClick={() => certificar(true)}>
-            {rodando ? "certificando…" : "Comecar NOVA execucao"}
+          <button type="button" disabled={ocupado} onClick={() => certificar(true)}>
+            {ocupado ? "certificando…" : "Comecar NOVA execucao"}
           </button>
         ) : (
           <button
             type="button"
-            disabled={rodando || Boolean(selado)}
+            disabled={ocupado || Boolean(selado)}
             onClick={() => certificar(false)}
           >
-            {rodando
-              ? "certificando…"
-              : estado?.iniciada
-                ? "Continuar as etapas"
-                : "Certificar o A1a"}
+            {modo === "acompanhando"
+              ? "acompanhando a etapa em andamento…"
+              : modo === "conduzindo"
+                ? "certificando…"
+                : selado
+                  ? "selado"
+                  : estado?.iniciada && estado.proxima !== null && estado.proxima !== undefined
+                    ? `Continuar a partir da etapa ${estado.proxima}`
+                    : "Certificar o A1a"}
           </button>
         )}
-        {aviso ? (
-          <span className="sub" style={{ fontSize: 12.5 }}>
-            {aviso}
-          </span>
-        ) : null}
       </div>
     </div>
   );
